@@ -1,0 +1,17 @@
+# Outils / config locale (ne pas publier)
+.claude/
+CLAUDE.md
+*.code-workspace
+.vscode/
+.idea/
+
+# Artefacts OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Sauvegardes / temporaires
+*.bak
+*.tmp
+*~
+*.orig

@@ -1,0 +1,81 @@
+-- Rules.lua
+-- =====================================================================
+--  TES REGLES — c'est ICI que tu ajoutes/modifies les conditions.
+-- =====================================================================
+--
+--  IMPORTANT (WoW 12.0.5 / Midnight) : en combat, la vie et la puissance du
+--  joueur sont des "valeurs secretes". On ne peut PAS ecrire de comparaison
+--  libre dessus (ex: "puissance > 75" plante). On utilise donc des regles
+--  DECLARATIVES a seuil, que l'addon convertit en Curve secret-safe.
+--
+--  --- Regle a SEUIL (1 condition) ---
+--    ns:AddRule({
+--      class     = "DEATHKNIGHT",             -- optionnel : seulement cette classe
+--      spellID   = 49998,                     -- icone affichee
+--      label     = "...",                     -- nom affiche en mode unlock
+--      source    = "power",                   -- "power" ou "health"
+--      powerType = Enum.PowerType.RunicPower, -- requis si source == "power"
+--      op        = ">",                       -- ">" (au-dessus) ou "<" (en-dessous)
+--      value     = 75,                        -- seuil en valeur ABSOLUE ...
+--      -- pct    = 50,                        -- ... OU en POURCENTAGE (0-100)
+--    })
+--
+--  --- Regle a PLUSIEURS conditions (mutualisees sur une icone) ---
+--    ns:AddRule({
+--      spellID = 49998, label = "...",
+--      combine = "OR",                        -- "OR" (au moins une) ou "AND" (toutes)
+--      conditions = {
+--        { source = "health", op = "<", pct = 50 },
+--        { source = "power", powerType = Enum.PowerType.RunicPower, op = ">", value = 75 },
+--      },
+--    })
+--
+--  --- Regle a FONCTION (conditions NON secretes uniquement) ---
+--    ns:AddRule({
+--      class = "...", spellID = ..., label = "...",
+--      check = function() return ns.SpellReady(49998) end,
+--    })
+--    Helpers autorises dans check() : ns.SpellReady(id), ns.SpellUsable(id).
+--    NE PAS lire la vie/puissance dans un check() (-> erreur en combat).
+-- =====================================================================
+
+local ADDON, ns = ...
+
+-- (Aucune regle integree : cree les tiennes via /xpaura config)
+
+-- ---- EXEMPLES (decommente / adapte) ----------------------------------------
+
+-- -- Demoniste : Eclat de l'ame quand l'energie depasse 80%
+-- ns:AddRule({
+--     class     = "WARLOCK",
+--     spellID   = 686,
+--     label     = "Energie > 80%",
+--     source    = "power",
+--     powerType = Enum.PowerType.Mana,
+--     op        = ">",
+--     pct       = 80,
+-- })
+
+-- -- N'importe quelle classe : alerte vie basse < 35%
+-- ns:AddRule({
+--     texture = "Interface\\Icons\\Spell_Holy_SealOfSacrifice",
+--     label   = "Vie basse !",
+--     source  = "health",
+--     op      = "<",
+--     pct     = 35,
+-- })
+
+-- -- Suivi de cooldown (combat-safe) : icone + balayage de recharge du sort.
+-- ns:AddRule({
+--     class   = "DEATHKNIGHT",
+--     spellID = 49028,            -- ex. Arme runique dansante
+--     label   = "Arme runique",
+--     cooldown = true,
+-- })
+
+-- -- ATTENTION : les conditions d'AURA (stacks/temps/presence) ne sont lisibles
+-- -- que HORS COMBAT en 12.0 (valeurs secretes). A reserver a des rappels hors combat :
+-- -- ns:AddRule({
+-- --     spellID = 195182, label = "Bouclier d'os bas",
+-- --     conditions = { { kind = "aura", watchSpellID = 195181, mode = "stacks", op = "<=", value = 6 } },
+-- -- })

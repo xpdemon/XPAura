@@ -1,0 +1,21 @@
+## Interface: 120005
+## Title: XpAura
+## Notes: Shows a glowing icon based on conditions (power, health, spells...).
+## Notes-frFR: Affiche une icone qui brille (glow) selon des conditions (puissance, vie, sorts...).
+## Notes-deDE: Zeigt ein leuchtendes Symbol nach Bedingungen (Ressource, Leben, Zauber...).
+## Notes-ruRU: Показывает светящийся значок по условиям (ресурс, здоровье, заклинания...).
+## Notes-zhCN: 根据条件（能量、生命、法术等）显示发光图标。
+## Notes-koKR: 조건(자원, 생명력, 주문 등)에 따라 빛나는 아이콘을 표시합니다.
+## Notes-esES: Muestra un icono brillante segun condiciones (poder, salud, hechizos...).
+## Notes-esMX: Muestra un icono brillante segun condiciones (poder, salud, hechizos...).
+## Notes-ptBR: Mostra um icone brilhante conforme condicoes (poder, vida, magias...).
+## Author: Bruno
+## Version: 1.0
+## SavedVariables: XpAuraDB
+## SavedVariablesPerCharacter: XpAuraCharDB
+
+Locale.lua
+Glow.lua
+Core.lua
+Config.lua
+Rules.lua
