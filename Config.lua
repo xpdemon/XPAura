@@ -241,6 +241,37 @@ local function MakeDropdown(parent, w, x, y, items, getIndex, setIndex)
     return b
 end
 
+-- Permet de remplir un EditBox par Maj+clic sur un sort du grimoire.
+-- Au shift-clic, WoW appelle ChatEdit_InsertLink(lien) sur l'EditBox focus ; on
+-- intercepte (hooksecurefunc) et on extrait le spellID du lien |Hspell:ID:...|h.
+local spellLinkTargets = {}
+local spellDropHooked = false
+local function EnableSpellDrop(editbox)
+    if not editbox then return end
+    spellLinkTargets[#spellLinkTargets + 1] = editbox
+    -- Infobulle d'aide.
+    editbox:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L["Shift-click a spell in your spellbook to fill this field."], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    editbox:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    if spellDropHooked or not _G.ChatEdit_InsertLink then return end
+    spellDropHooked = true
+    hooksecurefunc("ChatEdit_InsertLink", function(text)
+        if type(text) ~= "string" then return end
+        local id = tonumber(text:match("|?H?spell:(%d+)"))
+        if not id then return end
+        for _, eb in ipairs(spellLinkTargets) do
+            if eb:IsVisible() and eb:HasFocus() then
+                eb:SetText(tostring(id))
+                eb:SetCursorPosition(0)
+                return
+            end
+        end
+    end)
+end
+
 --------------------------------------------------------------------------------
 -- Etat + menu
 --------------------------------------------------------------------------------
@@ -793,6 +824,7 @@ local function BuildConfig()
         local _, tex = ResolveSpell(self:GetText())
         cfg.iconPreview:SetTexture(tex or QUESTION)
     end)
+    EnableSpellDrop(cfg.spellBox)
 
     -- Type de regle
     MakeLabel(cfg, L["Rule type:"], 16, -92, 98)
@@ -830,6 +862,7 @@ local function BuildConfig()
     -- Eclair lumineux qui s'allume quand Horion sacre n'est PAS pret).
     cfg.watchLabel = cw(MakeLabel(cfg, L["Watched spell:"], 16, -218, 98))
     cfg.watchSpellBox = cw(MakeEdit(cfg, 180, 120, -222))
+    EnableSpellDrop(cfg.watchSpellBox)
     cfg.watchHint = cw(MakeLabel(cfg, "|cff888888" .. L["(empty = icon's spell)"] .. "|r", 16, -250))
 
     cfg.addCondBtn = cw(MakeButton(cfg, 200, 16, -286, L["+ Add this condition"]))
