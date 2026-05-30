@@ -455,6 +455,20 @@ function RefreshList()
     parent:SetHeight(math.max(10, math.abs(y) + 6))
 end
 
+-- Annule l'edition/creation en cours : remet le formulaire a un etat "nouvelle regle".
+local function ResetForm()
+    if not cfg then return end
+    form.editIndex = nil
+    form.pending = {}
+    if cfg.labelBox then cfg.labelBox:SetText("") end
+    if cfg.spellBox then cfg.spellBox:SetText("") end
+    if cfg.keyTextBox then cfg.keyTextBox:SetText("") end
+    if cfg.watchSpellBox then cfg.watchSpellBox:SetText("") end
+    if cfg.valueBox then cfg.valueBox:SetText("50") end
+    if cfg.createBtn then cfg.createBtn:SetText(L["Create rule"]) end
+    RefreshPending()
+end
+
 local function CreateRule()
     local db = ns.GetDB()
     local sid, _, sname = ResolveSpell(cfg.spellBox:GetText())
@@ -937,9 +951,13 @@ local function BuildConfig()
     ti(MakeLabel(cfg, L["Snap icons to grid"], 44, -546, 382), 44, -546)
 
     -- Creer / Enregistrer la regle
-    cfg.createBtn = MakeButton(cfg, 220, 90, -572, L["Create rule"])
+    cfg.createBtn = MakeButton(cfg, 200, 90, -572, L["Create rule"])
     cfg.createBtn:SetScript("OnClick", CreateRule)
     ti(cfg.createBtn, 90, -572)
+    -- Annuler : sort du mode edition / vide le formulaire (marche arriere si erreur).
+    cfg.cancelBtn = MakeButton(cfg, 120, 298, -572, L["Cancel"])
+    cfg.cancelBtn:SetScript("OnClick", ResetForm)
+    ti(cfg.cancelBtn, 298, -572)
 
     -- Verrouiller / Deverrouiller le placement des icones (global, comme /xpaura lock/unlock).
     cfg.unlockBtn = MakeButton(cfg, 185, 16, -606, L["Unlock (place)"])
