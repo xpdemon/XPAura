@@ -808,6 +808,8 @@ SlashCmdList.XPAURA = function(msg)
         Print(("locked=%s  frames=%d  combat=%s  CurveUtil=%s"):format(
             tostring(db.locked), #ns.frames, tostring(InCombatLockdown()),
             tostring(CreateCurve ~= nil)))
+        Print(("spell-link hook fires=%s lastId=%s"):format(
+            tostring(ns._linkFires or 0), tostring(ns._linkLastId)))
         for i, f in ipairs(ns.frames) do
             local r = f.rule
             local parts = {}

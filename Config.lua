@@ -242,13 +242,16 @@ local function MakeDropdown(parent, w, x, y, items, getIndex, setIndex)
 end
 
 -- Permet de remplir un EditBox par Maj+clic sur un sort du grimoire.
--- Au shift-clic, WoW appelle ChatEdit_InsertLink(lien) sur l'EditBox focus ; on
--- intercepte (hooksecurefunc) et on extrait le spellID du lien |Hspell:ID:...|h.
+-- Au shift-clic, WoW appelle ChatEdit_InsertLink(lien) ; on intercepte (hooksecurefunc)
+-- et on extrait le spellID du lien |Hspell:ID:...|h. Le clic sur le sort peut faire
+-- PERDRE le focus du champ -> on memorise le dernier champ focus comme repli (robuste).
 local spellLinkTargets = {}
+local lastFocusedSpellBox
 local spellDropHooked = false
 local function EnableSpellDrop(editbox)
     if not editbox then return end
     spellLinkTargets[#spellLinkTargets + 1] = editbox
+    editbox:HookScript("OnEditFocusGained", function(self) lastFocusedSpellBox = self end)
     -- Infobulle d'aide.
     editbox:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -260,14 +263,21 @@ local function EnableSpellDrop(editbox)
     spellDropHooked = true
     hooksecurefunc("ChatEdit_InsertLink", function(text)
         if type(text) ~= "string" then return end
-        local id = tonumber(text:match("|?H?spell:(%d+)"))
+        local id = tonumber(text:match("spell:(%d+)"))
         if not id then return end
+        ns._linkFires = (ns._linkFires or 0) + 1  -- diagnostic (cf. /xpaura test)
+        ns._linkLastId = id
+        -- 1) un champ a le focus ; sinon 2) le dernier champ focus encore visible.
+        local target
         for _, eb in ipairs(spellLinkTargets) do
-            if eb:IsVisible() and eb:HasFocus() then
-                eb:SetText(tostring(id))
-                eb:SetCursorPosition(0)
-                return
-            end
+            if eb:IsVisible() and eb:HasFocus() then target = eb; break end
+        end
+        if not target and lastFocusedSpellBox and lastFocusedSpellBox:IsVisible() then
+            target = lastFocusedSpellBox
+        end
+        if target then
+            target:SetText(tostring(id))
+            target:SetCursorPosition(0)
         end
     end)
 end
