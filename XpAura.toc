@@ -9,8 +9,8 @@
 ## Notes-esES: Muestra un icono brillante segun condiciones (poder, salud, hechizos...).
 ## Notes-esMX: Muestra un icono brillante segun condiciones (poder, salud, hechizos...).
 ## Notes-ptBR: Mostra um icone brilhante conforme condicoes (poder, vida, magias...).
-## Author: Bruno
-## Version: 1.0
+## Author: xpdemon
+## Version: 1.0.0
 ## SavedVariables: XpAuraDB
 ## SavedVariablesPerCharacter: XpAuraCharDB
 
