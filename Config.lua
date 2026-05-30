@@ -74,9 +74,14 @@ for _, s in ipairs(RAW_SOURCES) do
     end
 end
 
-local RULETYPE_ITEMS = { { name = L["Glow on conditions (health/power)"], mode = "conditions" },
-                         { name = L["Cooldown tracking (spell)"], mode = "cooldown" },
-                         { name = L["Runes available (DK)"], mode = "runes" } }
+local RULETYPE_ITEMS = {
+    { name = L["Conditions (health / power)"], mode = "conditions",
+      tip = "Show the icon when conditions are met: resource thresholds and/or spell availability, combined with AND/OR." },
+    { name = L["Cooldown tracking (spell)"], mode = "cooldown",
+      tip = "Track a spell's cooldown: a sweep timer on the icon, or glow when it is ready / at full charges." },
+    { name = L["Runes available (DK)"], mode = "runes",
+      tip = "Death Knight: glow when the number of ready runes meets a threshold." },
+}
 local SCOPE_ITEMS = { { name = L["Global (all classes)"] },
                       { name = L["Current class"] },
                       { name = L["Current spec"] } }
@@ -338,14 +343,23 @@ local function MakeDropdown(parent, w, x, y, items, getIndex, setIndex)
                 ob.fs:SetPoint("RIGHT", -6, 0)
                 ob.fs:SetJustifyH("LEFT")
                 ob.fs:SetTextColor(C(PAL.text))
-                ob:SetScript("OnEnter", function(s) Skin(s, PAL.accent, PAL.accent) end)
-                ob:SetScript("OnLeave", function(s) s:SetBackdrop(nil) end)
                 list.btns[i] = ob
             end
             ob.fs:SetText(items[i].name)
             ob:ClearAllPoints()
             ob:SetPoint("TOPLEFT", 2, -2 - (i - 1) * 20)
             ob:SetPoint("RIGHT", list, "RIGHT", -2, 0)
+            ob:SetScript("OnEnter", function(s)
+                Skin(s, PAL.accent, PAL.accent)
+                local it = items[i]
+                if it and it.tip then
+                    GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+                    GameTooltip:AddLine(it.name)
+                    GameTooltip:AddLine(L[it.tip], 0.9, 0.9, 0.9, true)
+                    GameTooltip:Show()
+                end
+            end)
+            ob:SetScript("OnLeave", function(s) s:SetBackdrop(nil); GameTooltip:Hide() end)
             ob:SetScript("OnClick", function() setIndex(i); refresh(); CloseDD() end)
             ob:SetBackdrop(nil)
             ob:Show()
@@ -514,9 +528,9 @@ local function UpdateFields()
     for _, w in ipairs(cfg.condWidgets) do w:SetShown(mode == "conditions") end
     for _, w in ipairs(cfg.cdWidgets)   do w:SetShown(mode == "cooldown") end
     for _, w in ipairs(cfg.runeWidgets) do w:SetShown(mode == "runes") end
+    -- Le glow est desormais optionnel pour TOUS les types (conditions, runes, cooldown).
     if cfg.glowWidgets then
-        local glowable = (mode == "conditions" or mode == "runes")
-        for _, w in ipairs(cfg.glowWidgets) do w:SetShown(glowable) end
+        for _, w in ipairs(cfg.glowWidgets) do w:SetShown(true) end
     end
     RefreshCondFields()
     RefreshPending()
@@ -676,6 +690,7 @@ local function CreateRule()
     local rmode = RULETYPE_ITEMS[form.ruleTypeIndex].mode
     if rmode == "cooldown" then
         rule.cooldown = true
+        rule.glow = form.glow and true or false  -- glow optionnel (modes pret/charges)
         local m = CDMODE_ITEMS[form.cdModeIndex].mode
         rule.glowWhenReady   = (m == "ready")
         rule.glowWhenCharged = (m == "charged")

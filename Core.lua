@@ -521,7 +521,7 @@ local function ConfigureFrame(f, rule, index)
             -- Glow quand pret, en IGNORANT le GCD (sinon chaque cast eteint tout ~1.5s).
             f.cooldownSpellID = nil
             f.cd:Hide()
-            layer.glow:Show()
+            if rule.glow ~= false then layer.glow:Show() else layer.glow:Hide() end  -- glow optionnel
             local sid = rule.spellID
             local curve = GetReadyCurve()
             f.alphaTargets[1] = { region = layer, eval = function()
@@ -536,7 +536,7 @@ local function ConfigureFrame(f, rule, index)
             -- Glow quand charges pleines (la recharge de charge ignore le GCD).
             f.cooldownSpellID = nil
             f.cd:Hide()
-            layer.glow:Show()
+            if rule.glow ~= false then layer.glow:Show() else layer.glow:Hide() end  -- glow optionnel
             local sid = rule.spellID
             f.alphaTargets[1] = { region = layer, eval = function()
                 if not sid then return 0 end
