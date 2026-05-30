@@ -848,6 +848,7 @@ driver:SetScript("OnEvent", function(self, event)
         ns.Rebuild()
         ns.UpdateGrid()
         if ns.SetupMinimap then ns.SetupMinimap() end
+        if ns.SetupOptions then ns.SetupOptions() end
         self:SetScript("OnUpdate", OnUpdate)
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         -- Hors combat seulement (un changement de spe n'arrive pas en combat).

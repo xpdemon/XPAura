@@ -1,5 +1,5 @@
 -- Config.lua
--- Menu in-game : creer/supprimer des regles.
+-- Menu in-game (theme sombre plat, fenetre a onglets) : creer/editer/supprimer des regles.
 --   * Conditions (vie/puissance, secret-safe) -> glow combinables OU/ET.
 --   * Suivi de cooldown -> icone + balayage de recharge (combat-safe via objet Duration).
 local ADDON, ns = ...
@@ -13,11 +13,34 @@ local function Print(msg)
 end
 
 --------------------------------------------------------------------------------
+-- Theme sombre plat (assets natifs : WHITE8x8 recolore + BackdropTemplate)
+--------------------------------------------------------------------------------
+local WHITE = "Interface\\Buttons\\WHITE8x8"
+local PAL = {
+    bg     = { 0.08, 0.08, 0.08, 0.96 },
+    panel  = { 0.12, 0.12, 0.12, 1 },
+    elem   = { 0.18, 0.18, 0.18, 1 },
+    border = { 0.25, 0.25, 0.25, 1 },
+    hover  = { 0.24, 0.24, 0.24, 1 },
+    accent = { 0.30, 0.45, 0.85, 1 },
+    title  = { 0.16, 0.20, 0.34, 1 },
+    text   = { 0.90, 0.90, 0.90 },
+    dim    = { 0.60, 0.60, 0.60 },
+    danger = { 0.70, 0.35, 0.35, 1 },
+}
+local function C(t) return t[1], t[2], t[3], t[4] or 1 end
+
+local function Skin(f, bg, border)
+    f:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
+    f:SetBackdropColor(C(bg or PAL.panel))
+    f:SetBackdropBorderColor(C(border or PAL.border))
+end
+
+--------------------------------------------------------------------------------
 -- Listes d'options
 --------------------------------------------------------------------------------
 local function PT(name) return Enum.PowerType and Enum.PowerType[name] end
--- Nom localise d'une ressource : constante globale Blizzard (deja traduite dans
--- chaque client) si dispo, sinon repli sur la traduction L (puis l'anglais).
+-- Nom localise d'une ressource : constante globale Blizzard (deja traduite) si dispo.
 local function GS(global, fallbackKey)
     local s = _G[global]
     if type(s) == "string" and s ~= "" then return s end
@@ -39,7 +62,6 @@ local RAW_SOURCES = {
     { name = GS("LUNAR_POWER", "Lunar Power"),  source = "power", pt = PT("LunarPower") },
     { name = GS("ESSENCE", "Essence"),          source = "power", pt = PT("Essence") },
     { name = GS("COMBO_POINTS", "Combo Points"),source = "power", pt = PT("ComboPoints") },
-    -- Disponibilite d'un sort (combat-safe). On choisit le sort surveille (vide = icone).
     { name = L["Spell ready"],        source = "spellready" },
     { name = L["Spell NOT ready"],    source = "spellnotready" },
     { name = L["Spell charges full"], source = "spellcharged" },
@@ -55,13 +77,10 @@ end
 local RULETYPE_ITEMS = { { name = L["Glow on conditions (health/power)"], mode = "conditions" },
                          { name = L["Cooldown tracking (spell)"], mode = "cooldown" },
                          { name = L["Runes available (DK)"], mode = "runes" } }
--- Portee d'une regle : globale / classe actuelle / spe actuelle. Le nom de la spe (3e
--- option) est rafraichi dynamiquement par RefreshScopeName().
 local SCOPE_ITEMS = { { name = L["Global (all classes)"] },
                       { name = L["Current class"] },
                       { name = L["Current spec"] } }
 
--- ID de spe (global, unique) courant, ou nil hors-jeu/indispo.
 local function CurrentSpecID()
     if not (GetSpecialization and GetSpecializationInfo) then return nil end
     local idx = GetSpecialization()
@@ -69,7 +88,6 @@ local function CurrentSpecID()
     return (GetSpecializationInfo(idx))
 end
 
--- Liste {id, name} des spes de la classe courante, dans l'ordre des index.
 local function SpecList()
     local out = {}
     if GetNumSpecializations and GetSpecializationInfo then
@@ -81,7 +99,6 @@ local function SpecList()
     return out
 end
 
--- Met a jour le libelle de la 3e option de portee avec le nom de la spe courante.
 local function RefreshScopeName()
     local name
     if GetSpecialization and GetSpecializationInfo then
@@ -117,7 +134,7 @@ local function CondDesc(c)
     if c.kind == "runes" then
         return "runes " .. (c.op or ">=") .. " " .. (c.value or 2)
     end
-    if c.kind == "aura" then  -- ancienne regle aura (hors combat seulement)
+    if c.kind == "aura" then
         return "aura #" .. tostring(c.watchSpellID) .. " " .. tostring(c.mode)
     end
     if c.kind == "spell" then
@@ -159,10 +176,9 @@ local function ResolveSpell(text)
 end
 
 --------------------------------------------------------------------------------
--- Constructeurs de widgets
+-- Toolkit de widgets sombres
 --------------------------------------------------------------------------------
--- Reduit la police d'un FontString jusqu'a tenir dans maxW (plancher 8) : evite que
--- les traductions longues (de/ru...) debordent ou chevauchent le widget voisin.
+-- Reduit la police d'un FontString jusqu'a tenir dans maxW (anti-debordement i18n).
 local function FitText(fs, maxW)
     if not (fs and fs.GetFont and maxW and maxW > 0) then return end
     if fs.SetWordWrap then fs:SetWordWrap(false) end
@@ -176,75 +192,201 @@ local function FitText(fs, maxW)
     end
 end
 
--- maxW (optionnel) : largeur max ; au-dela, la police retrecit (anti-debordement i18n).
 local function MakeLabel(parent, text, x, y, maxW)
-    local fs = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    local fs = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     fs:SetPoint("TOPLEFT", x, y)
+    fs:SetTextColor(C(PAL.text))
     fs:SetText(text)
     if maxW then FitText(fs, maxW) end
     return fs
 end
 
+local function MakeHeader(parent, text, x, y, w)
+    local fs = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    fs:SetPoint("TOPLEFT", x, y)
+    fs:SetTextColor(C(PAL.accent))
+    fs:SetText(text)
+    -- ligne separatrice sous le titre
+    local line = parent:CreateTexture(nil, "ARTWORK")
+    line:SetColorTexture(C(PAL.border))
+    line:SetPoint("TOPLEFT", x, y - 16)
+    line:SetSize(w or 300, 1)
+    fs.line = line
+    return fs
+end
+
 local function MakeEdit(parent, w, x, y)
-    local e = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    e:SetSize(w, 20)
-    e:SetPoint("TOPLEFT", x, y)
+    local e = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
+    e:SetSize(w, 22)
+    if x then e:SetPoint("TOPLEFT", x, y) end
+    Skin(e, { 0.05, 0.05, 0.05, 1 }, PAL.border)
     e:SetAutoFocus(false)
     e:SetFontObject(ChatFontNormal)
+    e:SetTextInsets(6, 6, 0, 0)
+    e:SetTextColor(C(PAL.text))
     e:SetScript("OnEscapePressed", e.ClearFocus)
     e:SetScript("OnEnterPressed", e.ClearFocus)
     return e
 end
 
 local function MakeButton(parent, w, x, y, text)
-    local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetSize(w, 22)
-    b:SetPoint("TOPLEFT", x, y)
-    b:SetText(text)
-    if b.GetFontString then FitText(b:GetFontString(), w - 10) end
+    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    b:SetSize(w or 100, 22)
+    if x then b:SetPoint("TOPLEFT", x, y) end
+    Skin(b, PAL.elem, PAL.border)
+    b.fs = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    b.fs:SetPoint("CENTER")
+    b.fs:SetTextColor(C(PAL.text))
+    b.SetText = function(self, t) self.fs:SetText(t); FitText(self.fs, (self:GetWidth() or w) - 10) end
+    b.GetText = function(self) return self.fs:GetText() end
+    if text then b:SetText(text) end
+    b:SetScript("OnEnter", function(s) s:SetBackdropColor(C(PAL.hover)) end)
+    b:SetScript("OnLeave", function(s) s:SetBackdropColor(C(PAL.elem)) end)
     return b
 end
 
-local ddRefreshers = {}  -- pour rafraichir le texte affiche apres un changement programme
-local function MakeDropdown(parent, w, x, y, items, getIndex, setIndex)
-    local ok, dd = pcall(function()
-        local d = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
-        d:SetSize(w, 22)
-        d:SetPoint("TOPLEFT", x, y)
-        d:SetupMenu(function(_, root)
-            for i, it in ipairs(items) do
-                root:CreateRadio(it.name,
-                    function() return getIndex() == i end,
-                    function() setIndex(i); return MenuResponse and MenuResponse.Close or 2 end)
-            end
-        end)
-        return d
+-- Case a cocher custom (carre + coche accent).
+local function MakeCheck(parent, x, y, label, maxW)
+    local c = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    c:SetSize(18, 18)
+    c:SetPoint("TOPLEFT", x, y)
+    Skin(c, PAL.elem, PAL.border)
+    c.tick = c:CreateTexture(nil, "ARTWORK")
+    c.tick:SetPoint("TOPLEFT", 3, -3)
+    c.tick:SetPoint("BOTTOMRIGHT", -3, 3)
+    c.tick:SetColorTexture(C(PAL.accent))
+    c.tick:Hide()
+    c.checked = false
+    c.GetChecked = function(self) return self.checked end
+    c.SetChecked = function(self, v) self.checked = v and true or false; self.tick:SetShown(self.checked) end
+    c:SetScript("OnEnter", function(s) s:SetBackdropColor(C(PAL.hover)) end)
+    c:SetScript("OnLeave", function(s) s:SetBackdropColor(C(PAL.elem)) end)
+    c:SetScript("OnClick", function(self)
+        self:SetChecked(not self.checked)
+        if self.onClick then self.onClick(self) end
     end)
-    if ok and dd then
-        ddRefreshers[#ddRefreshers + 1] = function()
-            if dd.GenerateMenu then dd:GenerateMenu() end
-            if dd.Text then FitText(dd.Text, w - 26) end  -- best-effort anti-debordement
-        end
-        return dd
+    if label then
+        c.label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        c.label:SetPoint("LEFT", c, "RIGHT", 6, 0)
+        c.label:SetTextColor(C(PAL.text))
+        c.label:SetText(label)
+        if maxW then FitText(c.label, maxW) end
     end
-
-    local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetSize(w, 22)
-    b:SetPoint("TOPLEFT", x, y)
-    local function setBtn() b:SetText(items[getIndex()].name); if b.GetFontString then FitText(b:GetFontString(), w - 10) end end
-    setBtn()
-    b:SetScript("OnClick", function()
-        setIndex((getIndex() % #items) + 1)
-        setBtn()
-    end)
-    ddRefreshers[#ddRefreshers + 1] = setBtn
-    return b
+    return c
 end
 
--- Permet de remplir un EditBox par Maj+clic sur un sort du grimoire.
--- Au shift-clic, WoW appelle ChatEdit_InsertLink(lien) ; on intercepte (hooksecurefunc)
--- et on extrait le spellID du lien |Hspell:ID:...|h. Le clic sur le sort peut faire
--- PERDRE le focus du champ -> on memorise le dernier champ focus comme repli (robuste).
+-- Dropdown custom (bouton + liste deroulante). Ferme au choix ou au clic-dehors.
+local ddRefreshers = {}
+local openList
+local ddCloser
+local function CloseDD() if openList then openList:Hide(); openList = nil end if ddCloser then ddCloser:Hide() end end
+local function GetCloser()
+    if ddCloser then return ddCloser end
+    ddCloser = CreateFrame("Button", nil, UIParent)
+    ddCloser:SetAllPoints(UIParent)
+    ddCloser:SetFrameStrata("FULLSCREEN_DIALOG")
+    ddCloser:Hide()
+    ddCloser:SetScript("OnClick", CloseDD)
+    return ddCloser
+end
+
+local function MakeDropdown(parent, w, x, y, items, getIndex, setIndex)
+    local dd = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    dd:SetSize(w, 22)
+    if x then dd:SetPoint("TOPLEFT", x, y) end
+    Skin(dd, PAL.elem, PAL.border)
+    dd.fs = dd:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    dd.fs:SetPoint("LEFT", 8, 0)
+    dd.fs:SetPoint("RIGHT", -18, 0)
+    dd.fs:SetJustifyH("LEFT")
+    dd.fs:SetTextColor(C(PAL.text))
+    local arrow = dd:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    arrow:SetPoint("RIGHT", -6, 0)
+    arrow:SetText("v")
+    arrow:SetTextColor(C(PAL.dim))
+
+    local function refresh()
+        local it = items[getIndex()]
+        dd.fs:SetText(it and it.name or "")
+        FitText(dd.fs, w - 26)
+    end
+    refresh()
+    ddRefreshers[#ddRefreshers + 1] = refresh
+
+    local list = CreateFrame("Frame", nil, dd, "BackdropTemplate")
+    list:SetFrameStrata("FULLSCREEN_DIALOG")
+    list:SetClampedToScreen(true)
+    Skin(list, PAL.panel, PAL.border)
+    list:Hide()
+    list:SetPoint("TOPLEFT", dd, "BOTTOMLEFT", 0, -2)
+    list.btns = {}
+
+    dd:SetScript("OnEnter", function(s) s:SetBackdropColor(C(PAL.hover)) end)
+    dd:SetScript("OnLeave", function(s) s:SetBackdropColor(C(PAL.elem)) end)
+    dd:SetScript("OnHide", function() if openList == list then CloseDD() end end)
+    dd:SetScript("OnClick", function()
+        if list:IsShown() then CloseDD(); return end
+        if openList then openList:Hide() end
+        local n = #items
+        for i = 1, n do
+            local ob = list.btns[i]
+            if not ob then
+                ob = CreateFrame("Button", nil, list, "BackdropTemplate")
+                ob:SetHeight(20)
+                ob.fs = ob:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                ob.fs:SetPoint("LEFT", 8, 0)
+                ob.fs:SetPoint("RIGHT", -6, 0)
+                ob.fs:SetJustifyH("LEFT")
+                ob.fs:SetTextColor(C(PAL.text))
+                ob:SetScript("OnEnter", function(s) Skin(s, PAL.accent, PAL.accent) end)
+                ob:SetScript("OnLeave", function(s) s:SetBackdrop(nil) end)
+                list.btns[i] = ob
+            end
+            ob.fs:SetText(items[i].name)
+            ob:ClearAllPoints()
+            ob:SetPoint("TOPLEFT", 2, -2 - (i - 1) * 20)
+            ob:SetPoint("RIGHT", list, "RIGHT", -2, 0)
+            ob:SetScript("OnClick", function() setIndex(i); refresh(); CloseDD() end)
+            ob:SetBackdrop(nil)
+            ob:Show()
+        end
+        for i = n + 1, #list.btns do list.btns[i]:Hide() end
+        list:SetSize(w, n * 20 + 4)
+        local closer = GetCloser()
+        closer:SetFrameLevel(math.max(1, dd:GetFrameLevel()))
+        closer:Show()
+        list:SetFrameLevel(closer:GetFrameLevel() + 5)
+        list:Show()
+        openList = list
+    end)
+    return dd
+end
+
+-- Infobulle d'aide sur un widget (titre + corps localise).
+local function AddTooltip(w, title, bodyKey)
+    if not w then return end
+    w:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if title then GameTooltip:AddLine(title) end
+        if bodyKey then GameTooltip:AddLine(L[bodyKey], 0.9, 0.9, 0.9, true) end
+        GameTooltip:Show()
+    end)
+    w:HookScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+-- Recolore la scrollbar d'un UIPanelScrollFrameTemplate (best-effort).
+local function StyleScroll(scroll)
+    local sb = scroll.ScrollBar or _G[(scroll:GetName() or "") .. "ScrollBar"]
+    if sb then
+        if sb.Background then sb.Background:Hide() end
+        local thumb = sb.ThumbTexture or (sb.GetThumbTexture and sb:GetThumbTexture())
+        if thumb then thumb:SetColorTexture(C(PAL.accent)) end
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Maj+clic d'un sort du grimoire pour remplir un EditBox.
+--------------------------------------------------------------------------------
 local spellLinkTargets = {}
 local lastFocusedSpellBox
 local spellDropHooked = false
@@ -252,7 +394,6 @@ local function EnableSpellDrop(editbox)
     if not editbox then return end
     spellLinkTargets[#spellLinkTargets + 1] = editbox
     editbox:HookScript("OnEditFocusGained", function(self) lastFocusedSpellBox = self end)
-    -- Infobulle d'aide.
     editbox:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(L["Shift-click a spell in your spellbook to fill this field."], 1, 1, 1, true)
@@ -261,14 +402,12 @@ local function EnableSpellDrop(editbox)
     editbox:HookScript("OnLeave", function() GameTooltip:Hide() end)
     if spellDropHooked then return end
     spellDropHooked = true
-    -- Recoit le lien (spellbook -> ChatFrameUtil.InsertLink en 12.0 ; ChatEdit_InsertLink en legacy).
     local function onLink(text)
         if type(text) ~= "string" then return end
         local id = tonumber(text:match("spell:(%d+)"))
         if not id then return end
-        ns._linkFires = (ns._linkFires or 0) + 1  -- diagnostic (cf. /xpaura test)
+        ns._linkFires = (ns._linkFires or 0) + 1
         ns._linkLastId = id
-        -- 1) un champ a le focus ; sinon 2) le dernier champ focus encore visible.
         local target
         for _, eb in ipairs(spellLinkTargets) do
             if eb:IsVisible() and eb:HasFocus() then target = eb; break end
@@ -282,24 +421,24 @@ local function EnableSpellDrop(editbox)
         end
     end
     if ChatFrameUtil and ChatFrameUtil.InsertLink then
-        hooksecurefunc(ChatFrameUtil, "InsertLink", onLink)  -- grimoire Midnight (12.0)
+        hooksecurefunc(ChatFrameUtil, "InsertLink", onLink)
     end
     if _G.ChatEdit_InsertLink then
-        hooksecurefunc("ChatEdit_InsertLink", onLink)        -- voie historique
+        hooksecurefunc("ChatEdit_InsertLink", onLink)
     end
 end
 
 --------------------------------------------------------------------------------
--- Etat + menu
+-- Etat + logique
 --------------------------------------------------------------------------------
 local cfg
 local form, pendRows, ruleRows, headerRows
-local LoadRule    -- forward declaration (defini plus bas, reference par RefreshList)
-local RefreshList -- forward declaration (defini plus bas, appele par UpdateFields)
+local LoadRule
+local RefreshList
+local UpdateEditBanner
 
 local function CurrentCondition()
     local s = SOURCES[form.sourceIndex]
-    -- Condition "sort disponible" : surveille un sort precis (vide = sort de l'icone).
     if SPELL_SOURCE[s.source] then
         local mode = (s.source == "spellcharged") and "charged"
                   or (s.source == "spellnotready") and "notready" or "ready"
@@ -315,40 +454,42 @@ local function CurrentCondition()
     return c
 end
 
+-- Lignes de conditions en attente, rendues dans la zone editeur (cfg.editorBody).
+local PEND_Y = -412
 local function RefreshPending()
     pendRows = pendRows or {}
     for _, r in ipairs(pendRows) do r:Hide() end
-    if RULETYPE_ITEMS[form.ruleTypeIndex].mode ~= "conditions" then return end
-    local y = -344
+    if not cfg or RULETYPE_ITEMS[form.ruleTypeIndex].mode ~= "conditions" then return end
+    local parent = cfg.editorBody
+    local y = PEND_Y
     for i, c in ipairs(form.pending) do
         local row = pendRows[i]
         if not row then
-            row = CreateFrame("Frame", nil, cfg)
-            row:SetSize(360, 20)
+            row = CreateFrame("Frame", nil, parent)
+            row:SetSize(420, 20)
             row.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
             row.text:SetPoint("LEFT", 8, 0)
-            row.text:SetWidth(280)
+            row.text:SetWidth(360)
             row.text:SetJustifyH("LEFT")
             row.del = CreateFrame("Button", nil, row, "UIPanelCloseButton")
-            row.del:SetSize(22, 22)
+            row.del:SetSize(20, 20)
             row.del:SetPoint("RIGHT", 0, 0)
             pendRows[i] = row
         end
-        row.text:SetText("|cffaad4ff• " .. CondDesc(c) .. "|r")
+        row:SetParent(parent)
+        row.text:SetText("|cffaad4ff- " .. CondDesc(c) .. "|r")
         row.del:SetScript("OnClick", function()
             table.remove(form.pending, i)
             RefreshPending()
         end)
         row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 16, y)
+        row:SetPoint("TOPLEFT", 10, y)
         row:Show()
         y = y - 22
     end
 end
 
--- Pour les sources "sort dispo" : on masque Condition + Seuil (inapplicables) et on
--- montre a la place le champ "Sort surveille". Sinon l'inverse. Rien si pas en mode
--- conditions (UpdateFields a deja tout masque).
+-- Source "sort dispo" : masque Condition/Seuil, montre "Sort surveille".
 local function RefreshCondFields()
     if not cfg or not cfg.opDD then return end
     local condMode = RULETYPE_ITEMS[form.ruleTypeIndex].mode == "conditions"
@@ -366,70 +507,57 @@ local function RefreshCondFields()
     cfg.watchHint:SetShown(showSpell)
 end
 
--- Affiche/masque le bloc conditions vs la note cooldown selon le type de regle.
+-- Affiche/masque les blocs selon le type de regle (plus de tail-shift).
 local function UpdateFields()
     if not cfg then return end
     local mode = RULETYPE_ITEMS[form.ruleTypeIndex].mode
     for _, w in ipairs(cfg.condWidgets) do w:SetShown(mode == "conditions") end
     for _, w in ipairs(cfg.cdWidgets)   do w:SetShown(mode == "cooldown") end
     for _, w in ipairs(cfg.runeWidgets) do w:SetShown(mode == "runes") end
-    -- Le glow concerne les modes a conditions (vie/puissance) et runes.
     if cfg.glowWidgets then
         local glowable = (mode == "conditions" or mode == "runes")
         for _, w in ipairs(cfg.glowWidgets) do w:SetShown(glowable) end
     end
     RefreshCondFields()
-    -- Remonte en bloc la section basse sous le contenu du mode actif (supprime le vide).
-    -- conditions = position de base (0) ; cooldown/runes finissent plus haut -> on remonte.
-    if cfg.tailItems then
-        local delta = (mode == "conditions") and 0 or (mode == "runes" and 206 or 228)
-        local lowest = 0
-        for _, it in ipairs(cfg.tailItems) do
-            it.w:ClearAllPoints()
-            local yy = it.y + delta
-            it.w:SetPoint("TOPLEFT", it.x, yy)
-            if yy < lowest then lowest = yy end
-        end
-        cfg.tailShift = delta
-        -- La fenetre principale s'adapte juste au formulaire (la liste est dans le panneau lateral).
-        cfg:SetHeight(math.abs(lowest) + 44)
-        if RefreshList then RefreshList() end
-    end
     RefreshPending()
 end
 
--- Cree une ligne de regle (texte + boutons Editer/Suppr.) dans le panneau.
+-- Ligne de regle (icone + texte + Editer/Suppr.) dans l'onglet "Mes regles".
 local function CreateRuleRow(parent)
     local row = CreateFrame("Frame", nil, parent)
-    row:SetSize(350, 34)
+    row:SetSize(380, 34)
+    local hl = row:CreateTexture(nil, "BACKGROUND")
+    hl:SetAllPoints(); hl:SetColorTexture(C(PAL.accent)); hl:SetAlpha(0.12); hl:Hide()
+    row:SetScript("OnEnter", function() hl:Show() end)
+    row:SetScript("OnLeave", function() hl:Hide() end)
+    row:EnableMouse(true)
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetSize(22, 22)
+    row.icon:SetPoint("LEFT", 4, 0)
+    row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     row.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    row.text:SetPoint("LEFT", 6, 0)
+    row.text:SetPoint("LEFT", 32, 0)
     row.text:SetWidth(210)
     row.text:SetJustifyH("LEFT")
-    row.del = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    row.del:SetSize(62, 20)
-    row.del:SetPoint("RIGHT", -4, 0)
-    row.del:SetText(L["Delete"])
-    if row.del.GetFontString then FitText(row.del:GetFontString(), 56) end
-    row.edit = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    row.edit:SetSize(62, 20)
-    row.edit:SetPoint("RIGHT", row.del, "LEFT", -4, 0)
-    row.edit:SetText(L["Edit"])
-    if row.edit.GetFontString then FitText(row.edit:GetFontString(), 56) end
+    row.del = MakeButton(row, 58)
+    row.del:ClearAllPoints(); row.del:SetPoint("RIGHT", -4, 0); row.del:SetText(L["Delete"])
+    row.del.fs:SetTextColor(C(PAL.danger))
+    row.edit = MakeButton(row, 56)
+    row.edit:ClearAllPoints(); row.edit:SetPoint("RIGHT", row.del, "LEFT", -4, 0); row.edit:SetText(L["Edit"])
     return row
 end
 
--- Cree un en-tete d'accordeon cliquable (replie/deplie son groupe).
+-- En-tete d'accordeon cliquable.
 local function CreateRulesHeader(parent)
-    local h = CreateFrame("Button", nil, parent)
-    h:SetSize(360, 22)
-    local bg = h:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(); bg:SetColorTexture(0.25, 0.45, 0.75, 0.25)
-    local hl = h:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.10)
+    local h = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    h:SetSize(380, 22)
+    Skin(h, PAL.panel, PAL.border)
+    h:SetScript("OnEnter", function(s) s:SetBackdropColor(C(PAL.hover)) end)
+    h:SetScript("OnLeave", function(s) s:SetBackdropColor(C(PAL.panel)) end)
     h.text = h:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    h.text:SetPoint("LEFT", 6, 0)
+    h.text:SetPoint("LEFT", 8, 0)
     h.text:SetJustifyH("LEFT")
+    h.text:SetTextColor(C(PAL.accent))
     h:SetScript("OnClick", function(self)
         cfg.collapsed[self.key] = not cfg.collapsed[self.key]
         RefreshList()
@@ -437,7 +565,6 @@ local function CreateRulesHeader(parent)
     return h
 end
 
--- Liste des regles, groupee en accordeons : Global puis une section par spe de la classe.
 function RefreshList()
     local db = ns.GetDB()
     ruleRows = ruleRows or {}
@@ -446,7 +573,6 @@ function RefreshList()
     for _, r in ipairs(ruleRows) do r:Hide() end
     for _, h in ipairs(headerRows) do h:Hide() end
 
-    -- Groupes : Global, puis une entree par spe de la classe courante.
     local groups = { { key = "global", name = L["Global"], rules = {} } }
     local byKey = {}
     for _, s in ipairs(SpecList()) do
@@ -469,12 +595,11 @@ function RefreshList()
         header:SetParent(parent)
         local collapsed = cfg.collapsed[g.key] and true or false
         header.key = g.key
-        header.text:SetText(("|cffffd100%s %s|r |cff888888(%d)|r"):format(
-            collapsed and "+" or "-", g.name, #g.rules))
+        header.text:SetText(("%s %s |cff888888(%d)|r"):format(collapsed and "+" or "-", g.name, #g.rules))
         header:ClearAllPoints()
         header:SetPoint("TOPLEFT", parent, "TOPLEFT", 4, y)
         header:Show()
-        y = y - 24
+        y = y - 26
         if not collapsed then
             for _, entry in ipairs(g.rules) do
                 rN = rN + 1
@@ -482,12 +607,13 @@ function RefreshList()
                 ruleRows[rN] = row
                 row:SetParent(parent)
                 local i, rule = entry.idx, entry.rule
-                -- Tag [CLASSE] seulement dans Global pour les regles classe-only (sinon implicite).
+                local tex = rule.texture or (rule.spellID and GetSpellTexture(rule.spellID)) or QUESTION
+                row.icon:SetTexture(tex)
                 local tag = (g.key == "global" and rule.class) and (" |cff888888[" .. rule.class .. "]|r") or ""
                 row.text:SetText(("|cffffffff%s|r : %s%s"):format(rule.label or "?", RuleDesc(rule), tag))
                 row.del:SetScript("OnClick", function()
                     table.remove(db.userRules, i)
-                    if form.editIndex == i then form.editIndex = nil; cfg.createBtn:SetText(L["Create rule"]) end
+                    if form.editIndex == i then form.editIndex = nil; if UpdateEditBanner then UpdateEditBanner() end end
                     ns.Rebuild()
                     RefreshList()
                 end)
@@ -499,11 +625,24 @@ function RefreshList()
             end
         end
     end
-    if cfg.rulesEmpty then cfg.rulesEmpty:Hide() end
     parent:SetHeight(math.max(10, math.abs(y) + 6))
 end
 
--- Annule l'edition/creation en cours : remet le formulaire a un etat "nouvelle regle".
+-- Met a jour le bandeau "Edition: <nom>" + le libelle du bouton Creer/Enregistrer.
+function UpdateEditBanner()
+    if not cfg or not cfg.editBanner then return end
+    local db = ns.GetDB()
+    local r = form.editIndex and db.userRules[form.editIndex]
+    if r then
+        cfg.editBanner:SetText("|cffffd100" .. string.format(L["Editing: %s"], r.label or "?") .. "|r")
+        cfg.editBanner:Show()
+        cfg.createBtn:SetText(L["Save"])
+    else
+        cfg.editBanner:Hide()
+        cfg.createBtn:SetText(L["Create rule"])
+    end
+end
+
 local function ResetForm()
     if not cfg then return end
     form.editIndex = nil
@@ -513,7 +652,7 @@ local function ResetForm()
     if cfg.keyTextBox then cfg.keyTextBox:SetText("") end
     if cfg.watchSpellBox then cfg.watchSpellBox:SetText("") end
     if cfg.valueBox then cfg.valueBox:SetText("50") end
-    if cfg.createBtn then cfg.createBtn:SetText(L["Create rule"]) end
+    UpdateEditBanner()
     RefreshPending()
 end
 
@@ -563,10 +702,9 @@ local function CreateRule()
     end
 
     if form.editIndex and db.userRules[form.editIndex] then
-        rule.id = db.userRules[form.editIndex].id  -- conserve l'id (et la position sauvegardee)
+        rule.id = db.userRules[form.editIndex].id
         db.userRules[form.editIndex] = rule
         form.editIndex = nil
-        cfg.createBtn:SetText(L["Create rule"])
     else
         rule.id = "user" .. db.nextId
         db.nextId = db.nextId + 1
@@ -574,6 +712,7 @@ local function CreateRule()
     end
     form.pending = {}
     ns.Rebuild()
+    UpdateEditBanner()
     RefreshPending()
     RefreshList()
     cfg.labelBox:SetText("")
@@ -581,7 +720,6 @@ local function CreateRule()
     cfg.keyTextBox:SetText("")
 end
 
--- Charge une regle existante dans le formulaire pour l'editer.
 function LoadRule(i)
     local db = ns.GetDB()
     local rule = db.userRules[i]
@@ -591,7 +729,6 @@ function LoadRule(i)
     cfg.spellBox:SetText(rule.spellID and tostring(rule.spellID) or "")
     cfg.keyTextBox:SetText(rule.keyText or "")
     form.scopeIndex = rule.spec and 3 or (rule.class and 2 or 1)
-    -- Glow : ancienne regle sans champ -> consideree avec glow (retro-compat).
     form.glow = rule.glow ~= false
     if cfg.glowCheck then cfg.glowCheck:SetChecked(form.glow) end
     form.pending = {}
@@ -612,21 +749,21 @@ function LoadRule(i)
                 local t = {}; for k, v in pairs(c) do t[k] = v end
                 form.pending[#form.pending + 1] = t
             end
-        elseif rule.source then  -- ancienne regle a 1 condition
+        elseif rule.source then
             form.pending[1] = { kind = "resource", source = rule.source,
                 powerType = rule.powerType, op = rule.op, pct = rule.pct, value = rule.value }
         end
     end
 
-    cfg.createBtn:SetText(L["Save"])
+    UpdateEditBanner()
     if cfg.RefreshDropdowns then cfg.RefreshDropdowns() end
     UpdateFields()
+    if cfg.SelectTab then cfg.SelectTab(1) end
 end
 
 --------------------------------------------------------------------------------
--- Export / Import des regles (par perso) : code texte partageable.
+-- Export / Import (par perso) : code texte partageable.
 --------------------------------------------------------------------------------
--- Serialise une valeur "donnee" (table de scalaires) en litteral Lua compact.
 local Serialize
 Serialize = function(v)
     local t = type(v)
@@ -654,7 +791,6 @@ Serialize = function(v)
     return "nil"
 end
 
--- Base64 (encode/decode) standard, pour un code sur une seule ligne propre.
 local B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 local function Base64Encode(data)
     return ((data:gsub(".", function(x)
@@ -683,14 +819,13 @@ local function Base64Decode(data)
     end))
 end
 
--- Construit le code d'export pour toutes les regles du perso (positions/tailles incluses).
 local function ExportString()
     local db = ns.GetDB()
     local out = {}
     for _, rule in ipairs(db.userRules) do
         local copy = {}
         for k, val in pairs(rule) do
-            if k ~= "id" and k ~= "check" then copy[k] = val end  -- id reattribue ; pas de fonctions
+            if k ~= "id" and k ~= "check" then copy[k] = val end
         end
         if rule.id then
             copy._pos  = db.positions and db.positions[rule.id] or nil
@@ -701,7 +836,6 @@ local function ExportString()
     return "XPA1:" .. Base64Encode(Serialize(out))
 end
 
--- Importe un code : ajoute les regles au perso courant (sans ecraser). Retourne ok, nb/err.
 local function ImportString(str)
     str = (str or ""):gsub("%s", "")
     local payload = str:match("^XPA1:(.+)$")
@@ -710,7 +844,7 @@ local function ImportString(str)
     if not lua or lua == "" then return false, L["decode failed"] end
     local f = loadstring("return " .. lua)
     if not f then return false, L["unreadable data"] end
-    if setfenv then setfenv(f, {}) end  -- bac a sable : aucun acces aux globals
+    if setfenv then setfenv(f, {}) end
     local ok, data = pcall(f)
     if not ok or type(data) ~= "table" then return false, L["invalid data"] end
     local db = ns.GetDB()
@@ -734,52 +868,37 @@ local function ImportString(str)
     return true, n
 end
 
--- Fenetre unique reutilisee pour exporter (lecture) et importer (saisie).
+-- Fenetre export/import (sombre).
 local function EnsureIOPopup()
     if cfg.ioPopup then return cfg.ioPopup end
-    local p = CreateFrame("Frame", "XpAuraIO", cfg, "BasicFrameTemplateWithInset")
+    local p = CreateFrame("Frame", "XpAuraIO", cfg, "BackdropTemplate")
     p:SetSize(440, 320)
     p:SetPoint("CENTER")
     p:SetFrameStrata("DIALOG")
-    p:EnableMouse(true)
-    p:SetMovable(true)
-    p:RegisterForDrag("LeftButton")
+    Skin(p, PAL.bg, { 0, 0, 0, 1 })
+    p:EnableMouse(true); p:SetMovable(true); p:RegisterForDrag("LeftButton")
     p:SetScript("OnDragStart", p.StartMoving)
     p:SetScript("OnDragStop", p.StopMovingOrSizing)
 
-    p.title = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    p.title:SetPoint("TOP", 0, -5)
-
+    p.title = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    p.title:SetPoint("TOP", 0, -8); p.title:SetTextColor(C(PAL.text))
     p.note = p:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    p.note:SetPoint("TOPLEFT", 16, -28)
-    p.note:SetPoint("TOPRIGHT", -16, -28)
-    p.note:SetJustifyH("LEFT")
+    p.note:SetPoint("TOPLEFT", 16, -28); p.note:SetPoint("TOPRIGHT", -16, -28); p.note:SetJustifyH("LEFT")
 
-    local box = CreateFrame("EditBox", nil, p)
+    local box = CreateFrame("EditBox", nil, p, "BackdropTemplate")
     box:SetMultiLine(true)
-    box:SetPoint("TOPLEFT", 16, -48)
+    box:SetPoint("TOPLEFT", 16, -52)
     box:SetPoint("BOTTOMRIGHT", -16, 48)
+    Skin(box, { 0.05, 0.05, 0.05, 1 }, PAL.border)
     box:SetFontObject(ChatFontNormal)
-    box:SetAutoFocus(false)
-    box:SetMaxLetters(0)
-    box:SetTextInsets(4, 4, 4, 4)
+    box:SetAutoFocus(false); box:SetMaxLetters(0)
+    box:SetTextInsets(6, 6, 6, 6); box:SetTextColor(C(PAL.text))
     box:SetScript("OnEscapePressed", box.ClearFocus)
     p.edit = box
-    local bg = p:CreateTexture(nil, "BACKGROUND")
-    bg:SetColorTexture(0, 0, 0, 0.5)
-    bg:SetPoint("TOPLEFT", box, "TOPLEFT", -4, 4)
-    bg:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 4, -4)
 
-    p.accept = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    p.accept:SetSize(150, 24)
-    p.accept:SetPoint("BOTTOMLEFT", 16, 14)
-
-    p.close = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    p.close:SetSize(100, 24)
-    p.close:SetPoint("BOTTOMRIGHT", -16, 14)
-    p.close:SetText(L["Close"])
+    p.accept = MakeButton(p, 150); p.accept:ClearAllPoints(); p.accept:SetPoint("BOTTOMLEFT", 16, 14)
+    p.close = MakeButton(p, 100, nil, nil, L["Close"]); p.close:ClearAllPoints(); p.close:SetPoint("BOTTOMRIGHT", -16, 14)
     p.close:SetScript("OnClick", function() p:Hide() end)
-
     cfg.ioPopup = p
     return p
 end
@@ -791,9 +910,7 @@ local function ShowExport()
     p.edit:SetText(ExportString())
     p.accept:Hide()
     p:Show()
-    p.edit:SetFocus()
-    p.edit:HighlightText()
-    p.edit:SetCursorPosition(0)
+    p.edit:SetFocus(); p.edit:HighlightText(); p.edit:SetCursorPosition(0)
 end
 
 local function ShowImport()
@@ -801,185 +918,190 @@ local function ShowImport()
     p.title:SetText(L["Import rules"])
     p.note:SetText("|cffaad4ff" .. L["Paste a code (Ctrl+V) then click Import. Only import codes you trust."] .. "|r")
     p.edit:SetText("")
-    p.accept:Show()
-    p.accept:SetText(L["Import"])
+    p.accept:Show(); p.accept:SetText(L["Import"])
     p.accept:SetScript("OnClick", function()
         local ok, res = ImportString(p.edit:GetText())
         if ok then
             Print(string.format(L["imported %d rule(s)."], res))
-            RefreshList()
-            p:Hide()
+            RefreshList(); p:Hide()
         else
             Print("|cffff4040" .. string.format(L["import failed: %s"], tostring(res)) .. "|r")
         end
     end)
-    p:Show()
-    p.edit:SetFocus()
+    p:Show(); p.edit:SetFocus()
 end
 
-local function BuildConfig()
-    cfg = CreateFrame("Frame", "XpAuraConfig", UIParent, "BasicFrameTemplateWithInset")
-    cfg:SetSize(440, 784)
-    wipe(ddRefreshers)
-    cfg:SetPoint("CENTER")
-    cfg:SetFrameStrata("HIGH")
-    cfg:SetMovable(true)
-    cfg:EnableMouse(true)
-    cfg:RegisterForDrag("LeftButton")
-    cfg:SetScript("OnDragStart", cfg.StartMoving)
-    cfg:SetScript("OnDragStop", cfg.StopMovingOrSizing)
-    cfg:SetClampedToScreen(true)
+--------------------------------------------------------------------------------
+-- Construction de la fenetre (3 onglets)
+--------------------------------------------------------------------------------
+local function SelectTab(i)
+    if not cfg or not cfg.tabs then return end
+    for j, body in ipairs(cfg.tabs) do body:SetShown(j == i) end
+    for j, t in ipairs(cfg.tabBtns) do t:SetActive(j == i) end
+    cfg.currentTab = i
+end
 
-    local title = cfg:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    title:SetPoint("TOP", 0, -5)
-    title:SetText("XpAura — Configuration")
+local function MakeTab(parent, w, label, onClick)
+    local t = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    t:SetSize(w, 24)
+    Skin(t, PAL.elem, PAL.border)
+    t.fs = t:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    t.fs:SetPoint("CENTER"); t.fs:SetTextColor(C(PAL.text)); t.fs:SetText(label); FitText(t.fs, w - 8)
+    t.active = false
+    t.SetActive = function(self, a) self.active = a; self:SetBackdropColor(C(a and PAL.accent or PAL.elem)) end
+    t:SetScript("OnEnter", function(s) if not s.active then s:SetBackdropColor(C(PAL.hover)) end end)
+    t:SetScript("OnLeave", function(s) s:SetBackdropColor(C(s.active and PAL.accent or PAL.elem)) end)
+    t:SetScript("OnClick", onClick)
+    return t
+end
 
-    form = { ruleTypeIndex = 1, sourceIndex = 1, opIndex = 1, typeIndex = 1,
-             combineIndex = 1, cdModeIndex = 1, runeOpIndex = 1, scopeIndex = 1,
-             glow = false, pending = {} }
+local function BuildEditor(body)
+    cfg.editorBody = body
+    cfg.condWidgets, cfg.cdWidgets, cfg.runeWidgets, cfg.glowWidgets = {}, {}, {}, {}
+    local function cw(w) cfg.condWidgets[#cfg.condWidgets + 1] = w; return w end
+    local function cdw(w) cfg.cdWidgets[#cfg.cdWidgets + 1] = w; return w end
+    local function rw(w) cfg.runeWidgets[#cfg.runeWidgets + 1] = w; return w end
 
-    -- Nom + Icone (le sort dont on prend l'icone, et la cible du suivi de cooldown)
-    MakeLabel(cfg, L["Name:"], 16, -34, 98)
-    cfg.labelBox = MakeEdit(cfg, 128, 120, -32)
-    MakeLabel(cfg, L["Text:"], 256, -34, 50)
-    cfg.keyTextBox = MakeEdit(cfg, 58, 312, -32)  -- texte sur l'icone (ex. "F1")
+    -- Type de regle
+    MakeLabel(body, L["Rule type:"], 10, -12, 95)
+    cfg.ruleTypeDD = MakeDropdown(body, 320, 110, -10, RULETYPE_ITEMS,
+        function() return form.ruleTypeIndex end,
+        function(i) form.ruleTypeIndex = i; UpdateFields() end)
+    AddTooltip(cfg.ruleTypeDD, L["Rule type:"], "Choose what triggers the glow: resource/spell conditions, a spell cooldown, or DK runes.")
 
-    MakeLabel(cfg, L["Icon (name/ID):"], 16, -62, 98)
-    cfg.spellBox = MakeEdit(cfg, 150, 120, -60)
-    cfg.iconPreview = cfg:CreateTexture(nil, "ARTWORK")
-    cfg.iconPreview:SetSize(26, 26)
-    cfg.iconPreview:SetPoint("TOPLEFT", 296, -56)
-    cfg.iconPreview:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    cfg.iconPreview:SetTexture(QUESTION)
+    -- Icone & nom
+    MakeHeader(body, L["Icon & name"], 10, -44, 440)
+    MakeLabel(body, L["Icon (name/ID):"], 10, -66, 95)
+    cfg.spellBox = MakeEdit(body, 150, 110, -64)
+    cfg.iconPreview = body:CreateTexture(nil, "ARTWORK")
+    cfg.iconPreview:SetSize(24, 24); cfg.iconPreview:SetPoint("TOPLEFT", 268, -64)
+    cfg.iconPreview:SetTexCoord(0.07, 0.93, 0.07, 0.93); cfg.iconPreview:SetTexture(QUESTION)
     cfg.spellBox:SetScript("OnTextChanged", function(self)
         local _, tex = ResolveSpell(self:GetText())
         cfg.iconPreview:SetTexture(tex or QUESTION)
     end)
     EnableSpellDrop(cfg.spellBox)
+    MakeLabel(body, L["Name:"], 10, -94, 95)
+    cfg.labelBox = MakeEdit(body, 150, 110, -92)
+    MakeLabel(body, L["Text:"], 300, -94, 40)
+    cfg.keyTextBox = MakeEdit(body, 50, 340, -92)
 
-    -- Type de regle
-    MakeLabel(cfg, L["Rule type:"], 16, -92, 98)
-    cfg.ruleTypeDD = MakeDropdown(cfg, 300, 120, -96, RULETYPE_ITEMS,
-        function() return form.ruleTypeIndex end,
-        function(i) form.ruleTypeIndex = i; UpdateFields() end)
+    -- Options de la regle
+    MakeHeader(body, L["Rule options"], 10, -124, 440)
+    MakeLabel(body, L["Scope:"], 10, -146, 60)
+    cfg.scopeDD = MakeDropdown(body, 300, 110, -144, SCOPE_ITEMS,
+        function() return form.scopeIndex end,
+        function(i) form.scopeIndex = i end)
+    AddTooltip(cfg.scopeDD, L["Scope:"], "Where this rule is active: everywhere, your class, or only your current spec.")
+    cfg.glowCheck = MakeCheck(body, 10, -174, L["Add the glow (halo) when the icon lights up"], 380)
+    cfg.glowCheck.onClick = function(self) form.glow = self:GetChecked() end
+    cfg.glowWidgets[1] = cfg.glowCheck
+    cfg.glowWidgets[2] = cfg.glowCheck.label
+    AddTooltip(cfg.glowCheck, nil, "Add a pulsing halo around the icon when it lights up.")
 
     -- ===== Bloc CONDITIONS =====
-    cfg.condWidgets = {}
-    local function cw(w) cfg.condWidgets[#cfg.condWidgets + 1] = w; return w end
-
-    cw(MakeLabel(cfg, L["Show if:"], 16, -126, 98))
-    cfg.combineDD = cw(MakeDropdown(cfg, 300, 120, -130, COMBINE_ITEMS,
+    local condHeader = MakeHeader(body, L["Conditions"], 10, -204, 440)
+    cw(condHeader); cw(condHeader.line)
+    cw(MakeLabel(body, L["Show if:"], 10, -226, 90))
+    cfg.combineDD = cw(MakeDropdown(body, 300, 110, -224, COMBINE_ITEMS,
         function() return form.combineIndex end,
         function(i) form.combineIndex = i end))
-
-    cw(MakeLabel(cfg, "|cff66ccff" .. L["New condition:"] .. "|r", 16, -160, 320))
-    cw(MakeLabel(cfg, L["Resource:"], 16, -186, 98))
-    cfg.sourceDD = cw(MakeDropdown(cfg, 290, 120, -190, SOURCES,
+    cw(MakeLabel(body, "|cff66ccff" .. L["New condition:"] .. "|r", 10, -254, 320))
+    cw(MakeLabel(body, L["Resource:"], 10, -278, 90))
+    cfg.sourceDD = cw(MakeDropdown(body, 300, 110, -276, SOURCES,
         function() return form.sourceIndex end,
         function(i) form.sourceIndex = i; RefreshCondFields() end))
-    cfg.opLabel = cw(MakeLabel(cfg, L["Condition:"], 16, -218, 98))
-    cfg.opDD = cw(MakeDropdown(cfg, 290, 120, -222, OP_ITEMS,
+    AddTooltip(cfg.sourceDD, L["Resource:"], "Pick a health/power threshold, or a spell's availability (ready / not ready / charges full).")
+    cfg.opLabel = cw(MakeLabel(body, L["Condition:"], 10, -306, 90))
+    cfg.opDD = cw(MakeDropdown(body, 300, 110, -304, OP_ITEMS,
         function() return form.opIndex end,
         function(i) form.opIndex = i end))
-    cfg.seuilLabel = cw(MakeLabel(cfg, L["Threshold:"], 16, -250, 98))
-    cfg.typeDD = cw(MakeDropdown(cfg, 120, 120, -254, TYPE_ITEMS,
+    cfg.seuilLabel = cw(MakeLabel(body, L["Threshold:"], 10, -334, 90))
+    cfg.typeDD = cw(MakeDropdown(body, 120, 110, -332, TYPE_ITEMS,
         function() return form.typeIndex end,
         function(i) form.typeIndex = i end))
-    cfg.valueBox = cw(MakeEdit(cfg, 55, 250, -254))
+    cfg.valueBox = cw(MakeEdit(body, 55, 240, -332))
     cfg.valueBox:SetText("50")
-
-    -- Champ "sort surveille" : remplace Condition/Seuil quand la source est un "sort dispo".
-    -- Vide = surveille le sort de l'icone ; sinon on surveille ce sort precis (ex. icone
-    -- Eclair lumineux qui s'allume quand Horion sacre n'est PAS pret).
-    cfg.watchLabel = cw(MakeLabel(cfg, L["Watched spell:"], 16, -218, 98))
-    cfg.watchSpellBox = cw(MakeEdit(cfg, 180, 120, -222))
+    AddTooltip(cfg.seuilLabel, L["Threshold:"], "Value to compare. For discrete resources (Holy Power, Combo Points...) it snaps between whole numbers.")
+    cfg.watchLabel = cw(MakeLabel(body, L["Watched spell:"], 10, -306, 90))
+    cfg.watchSpellBox = cw(MakeEdit(body, 180, 110, -304))
     EnableSpellDrop(cfg.watchSpellBox)
-    cfg.watchHint = cw(MakeLabel(cfg, "|cff888888" .. L["(empty = icon's spell)"] .. "|r", 16, -250))
-
-    cfg.addCondBtn = cw(MakeButton(cfg, 200, 16, -286, L["+ Add this condition"]))
+    cfg.watchHint = cw(MakeLabel(body, "|cff888888" .. L["(empty = icon's spell)"] .. "|r", 10, -334, 300))
+    cfg.addCondBtn = cw(MakeButton(body, 200, 10, -362, L["+ Add condition"]))
     cfg.addCondBtn:SetScript("OnClick", function()
         table.insert(form.pending, CurrentCondition())
         RefreshPending()
     end)
-    cw(MakeLabel(cfg, L["Added conditions:"], 16, -318, 320))
-    -- (lignes de conditions creees par RefreshPending a partir de y=-344)
+    cw(MakeLabel(body, L["Added conditions:"], 10, -392, 320))
 
     -- ===== Bloc COOLDOWN =====
-    cfg.cdWidgets = {}
-    local function cdw(w) cfg.cdWidgets[#cfg.cdWidgets + 1] = w; return w end
-    cfg.cdNote = cdw(cfg:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall"))
-    cfg.cdNote:SetPoint("TOPLEFT", 16, -130)
-    cfg.cdNote:SetWidth(360)
-    cfg.cdNote:SetJustifyH("LEFT")
+    cfg.cdNote = cdw(body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall"))
+    cfg.cdNote:SetPoint("TOPLEFT", 10, -226); cfg.cdNote:SetWidth(440); cfg.cdNote:SetJustifyH("LEFT")
     cfg.cdNote:SetText("|cffaad4ff" .. L["The icon (above) follows the spell cooldown. Works in combat."] .. "|r")
-    cdw(MakeLabel(cfg, L["Display:"], 16, -168, 98))
-    cfg.cdModeDD = cdw(MakeDropdown(cfg, 300, 120, -172, CDMODE_ITEMS,
+    cdw(MakeLabel(body, L["Display:"], 10, -262, 90))
+    cfg.cdModeDD = cdw(MakeDropdown(body, 300, 110, -260, CDMODE_ITEMS,
         function() return form.cdModeIndex end,
         function(i) form.cdModeIndex = i end))
 
     -- ===== Bloc RUNES =====
-    cfg.runeWidgets = {}
-    local function rw(w) cfg.runeWidgets[#cfg.runeWidgets + 1] = w; return w end
-    rw(cfg:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")):SetText("")
-    cfg.runeNote = cfg.runeWidgets[1]
-    cfg.runeNote:SetPoint("TOPLEFT", 16, -130)
-    cfg.runeNote:SetWidth(360); cfg.runeNote:SetJustifyH("LEFT")
+    cfg.runeNote = rw(body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall"))
+    cfg.runeNote:SetPoint("TOPLEFT", 10, -226); cfg.runeNote:SetWidth(440); cfg.runeNote:SetJustifyH("LEFT")
     cfg.runeNote:SetText("|cffaad4ff" .. L["Glow when the number of ready runes meets the threshold. Works in combat."] .. "|r")
-    rw(MakeLabel(cfg, L["Runes ready:"], 16, -164, 98))
-    cfg.runeOpDD = rw(MakeDropdown(cfg, 130, 120, -168, RUNEOP_ITEMS,
+    rw(MakeLabel(body, L["Runes ready:"], 10, -262, 90))
+    cfg.runeOpDD = rw(MakeDropdown(body, 130, 110, -260, RUNEOP_ITEMS,
         function() return form.runeOpIndex end,
         function(i) form.runeOpIndex = i end))
-    cfg.runeValueBox = rw(MakeEdit(cfg, 40, 256, -168))
+    cfg.runeValueBox = rw(MakeEdit(body, 40, 246, -260))
     cfg.runeValueBox:SetText("2")
-    rw(MakeLabel(cfg, "/ 6", 304, -166))
+    rw(MakeLabel(body, "/ 6", 294, -260))
 
-    -- ===== Section basse ("queue") : repositionnee en bloc par UpdateFields selon le mode.
-    -- ti(widget, x, y) enregistre sa position de base et le renvoie.
-    cfg.tailItems = {}
-    local function ti(w, x, y)
-        cfg.tailItems[#cfg.tailItems + 1] = { w = w, x = x, y = y }
-        return w
-    end
+    -- Barre d'action (bas de l'onglet)
+    cfg.editBanner = body:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    cfg.editBanner:SetPoint("BOTTOMLEFT", 10, 38); cfg.editBanner:Hide()
+    cfg.createBtn = MakeButton(body, 220, nil, nil, L["Create rule"])
+    cfg.createBtn:ClearAllPoints(); cfg.createBtn:SetPoint("BOTTOMLEFT", 10, 8)
+    cfg.createBtn:SetScript("OnClick", CreateRule)
+    cfg.cancelBtn = MakeButton(body, 120, nil, nil, L["Cancel"])
+    cfg.cancelBtn:ClearAllPoints(); cfg.cancelBtn:SetPoint("BOTTOMLEFT", 238, 8)
+    cfg.cancelBtn:SetScript("OnClick", ResetForm)
+end
 
-    -- Glow (halo lumineux) -- par regle, visible en modes conditions / runes.
-    cfg.glowWidgets = {}
-    cfg.glowCheck = CreateFrame("CheckButton", nil, cfg, "UICheckButtonTemplate")
-    cfg.glowCheck:SetPoint("TOPLEFT", 16, -406)
-    cfg.glowCheck:SetScript("OnClick", function(self)
-        form.glow = self:GetChecked() and true or false
+local function BuildRulesTab(body)
+    cfg.exportBtn = MakeButton(body, 150, 4, -6, L["Export all"])
+    cfg.exportBtn:SetScript("OnClick", ShowExport)
+    cfg.importBtn = MakeButton(body, 150, 162, -6, L["Import"])
+    cfg.importBtn:SetScript("OnClick", ShowImport)
+
+    local scroll = CreateFrame("ScrollFrame", "XpAuraRulesScroll", body, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 4, -36)
+    scroll:SetPoint("BOTTOMRIGHT", -26, 6)
+    local child = CreateFrame("Frame", nil, scroll)
+    child:SetSize(400, 10)
+    scroll:SetScrollChild(child)
+    cfg.rulesChild = child
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        local range = self:GetVerticalScrollRange() or 0
+        local cur = self:GetVerticalScroll()
+        self:SetVerticalScroll(math.max(0, math.min(range, cur - delta * 36)))
     end)
-    cfg.glowWidgets[1] = ti(cfg.glowCheck, 16, -406)
-    cfg.glowWidgets[2] = ti(MakeLabel(cfg, L["Add the glow (halo) when the icon lights up"], 44, -410, 382), 44, -410)
+    StyleScroll(scroll)
+end
 
-    -- Portee de la regle (globale / classe actuelle / spe actuelle) -- par regle.
-    ti(MakeLabel(cfg, L["Scope:"], 16, -436, 68), 16, -436)
-    cfg.scopeDD = MakeDropdown(cfg, 320, 90, -432, SCOPE_ITEMS,
-        function() return form.scopeIndex end,
-        function(i) form.scopeIndex = i end)
-    ti(cfg.scopeDD, 90, -432)
+local function BuildSettingsTab(body)
+    MakeHeader(body, L["Global settings"], 10, -12, 440)
+    cfg.combatCheck = MakeCheck(body, 10, -36, L["Show icons only in combat (global)"], 400)
+    cfg.combatCheck.onClick = function(self) ns.GetDB().combatOnly = self:GetChecked() end
+    AddTooltip(cfg.combatCheck, nil, "Hide all XpAura icons while you are out of combat.")
 
-    -- Afficher seulement en combat (global)
-    cfg.combatCheck = CreateFrame("CheckButton", nil, cfg, "UICheckButtonTemplate")
-    cfg.combatCheck:SetPoint("TOPLEFT", 16, -458)
-    cfg.combatCheck:SetScript("OnClick", function(self)
-        local db = ns.GetDB()
-        db.combatOnly = self:GetChecked() and true or false
-    end)
-    ti(cfg.combatCheck, 16, -458)
-    ti(MakeLabel(cfg, L["Show icons only in combat (global)"], 44, -462, 382), 44, -462)
-
-    -- ===== Grille d'aide au placement (global) =====
-    cfg.gridShowCheck = CreateFrame("CheckButton", nil, cfg, "UICheckButtonTemplate")
-    cfg.gridShowCheck:SetPoint("TOPLEFT", 16, -486)
-    cfg.gridShowCheck:SetScript("OnClick", function(self)
-        ns.GetDB().gridShow = self:GetChecked() and true or false
+    MakeHeader(body, L["Placement grid"], 10, -74, 440)
+    cfg.gridShowCheck = MakeCheck(body, 10, -98, L["Show grid in move mode"], 400)
+    cfg.gridShowCheck.onClick = function(self)
+        ns.GetDB().gridShow = self:GetChecked()
         if ns.UpdateGrid then ns.UpdateGrid() end
-    end)
-    ti(cfg.gridShowCheck, 16, -486)
-    ti(MakeLabel(cfg, L["Show grid in move mode"], 44, -490, 382), 44, -490)
-
-    ti(MakeLabel(cfg, L["Grid step:"], 16, -514, 108), 16, -514)
-    cfg.gridStepDD = MakeDropdown(cfg, 110, 130, -518, GRIDSTEP_ITEMS,
+    end
+    MakeLabel(body, L["Grid step:"], 10, -130, 108)
+    cfg.gridStepDD = MakeDropdown(body, 110, 124, -128, GRIDSTEP_ITEMS,
         function()
             local s = ns.GetDB().gridSize or 20
             for i, it in ipairs(GRIDSTEP_ITEMS) do if it.step == s then return i end end
@@ -990,89 +1112,73 @@ local function BuildConfig()
             if ns.RebuildGrid then ns.RebuildGrid() end
             if ns.UpdateGrid then ns.UpdateGrid() end
         end)
-    ti(cfg.gridStepDD, 130, -518)
+    cfg.gridSnapCheck = MakeCheck(body, 10, -160, L["Snap icons to grid"], 400)
+    cfg.gridSnapCheck.onClick = function(self) ns.GetDB().gridSnap = self:GetChecked() end
 
-    cfg.gridSnapCheck = CreateFrame("CheckButton", nil, cfg, "UICheckButtonTemplate")
-    cfg.gridSnapCheck:SetPoint("TOPLEFT", 16, -542)
-    cfg.gridSnapCheck:SetScript("OnClick", function(self)
-        ns.GetDB().gridSnap = self:GetChecked() and true or false
-    end)
-    ti(cfg.gridSnapCheck, 16, -542)
-    ti(MakeLabel(cfg, L["Snap icons to grid"], 44, -546, 382), 44, -546)
-
-    -- Creer / Enregistrer la regle
-    cfg.createBtn = MakeButton(cfg, 200, 90, -572, L["Create rule"])
-    cfg.createBtn:SetScript("OnClick", CreateRule)
-    ti(cfg.createBtn, 90, -572)
-    -- Annuler : sort du mode edition / vide le formulaire (marche arriere si erreur).
-    cfg.cancelBtn = MakeButton(cfg, 120, 298, -572, L["Cancel"])
-    cfg.cancelBtn:SetScript("OnClick", ResetForm)
-    ti(cfg.cancelBtn, 298, -572)
-
-    -- Verrouiller / Deverrouiller le placement des icones (global, comme /xpaura lock/unlock).
-    cfg.unlockBtn = MakeButton(cfg, 185, 16, -606, L["Unlock (place)"])
+    MakeHeader(body, L["Icon placement"], 10, -198, 440)
+    cfg.unlockBtn = MakeButton(body, 200, 10, -222, L["Unlock (place)"])
     cfg.unlockBtn:SetScript("OnClick", function()
         ns.GetDB().locked = false
         if ns.UpdateGrid then ns.UpdateGrid() end
     end)
-    ti(cfg.unlockBtn, 16, -606)
-    cfg.lockBtn = MakeButton(cfg, 185, 211, -606, L["Lock"])
+    cfg.lockBtn = MakeButton(body, 150, 220, -222, L["Lock"])
     cfg.lockBtn:SetScript("OnClick", function()
         ns.GetDB().locked = true
         if ns.UpdateGrid then ns.UpdateGrid() end
     end)
-    ti(cfg.lockBtn, 211, -606)
+end
 
-    -- ===== Panneau lateral "Mes regles" (ancre a droite, liste defilante) =====
-    local side = CreateFrame("Frame", "XpAuraRulesPanel", cfg, "BasicFrameTemplateWithInset")
-    side:SetSize(420, 560)
-    side:SetPoint("TOPLEFT", cfg, "TOPRIGHT", -4, 0)
-    side:SetFrameStrata("HIGH")
-    if side.CloseButton then side.CloseButton:Hide() end
-    cfg.side = side
+local function BuildConfig()
+    cfg = CreateFrame("Frame", "XpAuraConfig", UIParent, "BackdropTemplate")
+    cfg:SetSize(480, 600)
+    cfg:SetPoint("CENTER")
+    cfg:SetFrameStrata("HIGH")
+    cfg:SetMovable(true); cfg:EnableMouse(true); cfg:SetClampedToScreen(true)
+    Skin(cfg, PAL.bg, { 0, 0, 0, 1 })
+    wipe(ddRefreshers)
 
-    local stitle = side:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    stitle:SetPoint("TOP", 0, -5)
-    stitle:SetText(L["My rules"])
+    form = { ruleTypeIndex = 1, sourceIndex = 1, opIndex = 1, typeIndex = 1,
+             combineIndex = 1, cdModeIndex = 1, runeOpIndex = 1, scopeIndex = 1,
+             glow = false, pending = {} }
 
-    cfg.exportBtn = CreateFrame("Button", nil, side, "UIPanelButtonTemplate")
-    cfg.exportBtn:SetSize(150, 22)
-    cfg.exportBtn:SetPoint("TOPLEFT", 12, -28)
-    cfg.exportBtn:SetText(L["Export all"])
-    cfg.exportBtn:SetScript("OnClick", ShowExport)
+    -- Barre de titre
+    local tb = CreateFrame("Frame", nil, cfg, "BackdropTemplate")
+    tb:SetPoint("TOPLEFT", 1, -1); tb:SetPoint("TOPRIGHT", -1, -1); tb:SetHeight(26)
+    Skin(tb, PAL.title, { 0, 0, 0, 0 })
+    tb:EnableMouse(true); tb:RegisterForDrag("LeftButton")
+    tb:SetScript("OnDragStart", function() cfg:StartMoving() end)
+    tb:SetScript("OnDragStop", function() cfg:StopMovingOrSizing() end)
+    local title = tb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("LEFT", 10, 0); title:SetText("XpAura"); title:SetTextColor(C(PAL.text))
+    cfg.closeBtn = MakeButton(tb, 22, nil, nil, "X")
+    cfg.closeBtn:ClearAllPoints(); cfg.closeBtn:SetPoint("RIGHT", -3, 0)
+    cfg.closeBtn:SetScript("OnClick", function() cfg:Hide() end)
 
-    cfg.importBtn = CreateFrame("Button", nil, side, "UIPanelButtonTemplate")
-    cfg.importBtn:SetSize(150, 22)
-    cfg.importBtn:SetPoint("LEFT", cfg.exportBtn, "RIGHT", 8, 0)
-    cfg.importBtn:SetText(L["Import"])
-    cfg.importBtn:SetScript("OnClick", ShowImport)
+    -- Onglets
+    cfg.tabs, cfg.tabBtns = {}, {}
+    local names = { L["Editor"], L["My rules"], L["Settings"] }
+    for i = 1, 3 do
+        local t = MakeTab(cfg, 152, names[i], function() SelectTab(i) end)
+        t:SetPoint("TOPLEFT", 6 + (i - 1) * 156, -30)
+        cfg.tabBtns[i] = t
+        local body = CreateFrame("Frame", nil, cfg)
+        body:SetPoint("TOPLEFT", 6, -58)
+        body:SetPoint("BOTTOMRIGHT", -6, 6)
+        cfg.tabs[i] = body
+    end
+    cfg.SelectTab = SelectTab
 
-    local scroll = CreateFrame("ScrollFrame", "XpAuraRulesScroll", side, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 12, -56)
-    scroll:SetPoint("BOTTOMRIGHT", -32, 12)
-    local child = CreateFrame("Frame", nil, scroll)
-    child:SetSize(370, 10)
-    scroll:SetScrollChild(child)
-    cfg.rulesChild = child
-    cfg.rulesScroll = scroll
-    scroll:EnableMouseWheel(true)
-    scroll:SetScript("OnMouseWheel", function(self, delta)
-        local range = self:GetVerticalScrollRange() or 0
-        local cur = self:GetVerticalScroll()
-        self:SetVerticalScroll(math.max(0, math.min(range, cur - delta * 36)))
-    end)
-
-    cfg.rulesEmpty = child:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    cfg.rulesEmpty:SetPoint("TOPLEFT", 6, -8)
-    cfg.rulesEmpty:SetText(L["(no rule — create one on the left)"])
-    cfg.rulesEmpty:Hide()
+    BuildEditor(cfg.tabs[1])
+    BuildRulesTab(cfg.tabs[2])
+    BuildSettingsTab(cfg.tabs[3])
 
     cfg.RefreshDropdowns = function()
         for _, fn in ipairs(ddRefreshers) do pcall(fn) end
     end
 
     UpdateFields()
-    cfg:Hide()  -- creee masquee : OpenConfig la montre (sinon il faut 2 commandes).
+    SelectTab(1)
+    cfg:Hide()
 end
 
 function ns.OpenConfig()
@@ -1094,6 +1200,7 @@ function ns.OpenConfig()
         if cfg.gridSnapCheck then cfg.gridSnapCheck:SetChecked(db.gridSnap and true or false) end
         RefreshScopeName()
         if cfg.RefreshDropdowns then cfg.RefreshDropdowns() end
+        UpdateEditBanner()
         pcall(RefreshPending)
         local ok, err = pcall(RefreshList)
         if not ok then
@@ -1101,6 +1208,24 @@ function ns.OpenConfig()
         end
         cfg:Show()
     end
+end
+
+--------------------------------------------------------------------------------
+-- Entree dans les Options Blizzard (Menu Jeu -> Options -> AddOns).
+--------------------------------------------------------------------------------
+function ns.SetupOptions()
+    if ns._optionsDone or not Settings or not Settings.RegisterCanvasLayoutCategory then return end
+    ns._optionsDone = true
+    local panel = CreateFrame("Frame")
+    panel.name = "XpAura"
+    local fs = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightLarge")
+    fs:SetPoint("TOPLEFT", 16, -16); fs:SetText("XpAura")
+    local btn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    btn:SetSize(220, 26); btn:SetPoint("TOPLEFT", 16, -52)
+    btn:SetText(L["Open configuration"])
+    btn:SetScript("OnClick", function() ns.OpenConfig() end)
+    local ok, cat = pcall(Settings.RegisterCanvasLayoutCategory, panel, "XpAura")
+    if ok and cat then pcall(Settings.RegisterAddOnCategory, cat) end
 end
 
 --------------------------------------------------------------------------------
@@ -1130,8 +1255,6 @@ function ns.SetupMinimap()
     overlay:SetPoint("TOPLEFT")
     overlay:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
 
-    -- Rayon = demi-largeur reelle de la minimap (+ marge) -> sur la PERIPHERIE,
-    -- quelle que soit la taille de la minimap (la valeur fixe tombait dedans).
     local function UpdatePos()
         local a = math.rad(db.minimap.angle or 215)
         local r = (Minimap:GetWidth() / 2) + 8

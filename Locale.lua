@@ -69,6 +69,30 @@ if locale == "frFR" then
     L["Cancel"] = "Annuler"
     L["Save"] = "Enregistrer"
     L["Close"] = "Fermer"
+    -- Refonte UI a onglets (theme sombre)
+    L["Editor"] = "Editeur"
+    L["Settings"] = "Reglages"
+    L["Icon & name"] = "Icone & nom"
+    L["Rule options"] = "Options de la regle"
+    L["Conditions"] = "Conditions"
+    L["Global settings"] = "Reglages globaux"
+    L["Placement grid"] = "Grille de placement"
+    L["Icon placement"] = "Placement des icones"
+    L["Editing: %s"] = "Edition : %s"
+    L["Open configuration"] = "Ouvrir la configuration"
+    L["+ Add condition"] = "+ Ajouter une condition"
+    L["Choose what triggers the glow: resource/spell conditions, a spell cooldown, or DK runes."] =
+        "Choisit ce qui declenche le glow : conditions ressource/sort, recharge d'un sort, ou runes (CM)."
+    L["Where this rule is active: everywhere, your class, or only your current spec."] =
+        "Ou cette regle s'applique : partout, ta classe, ou seulement ta spe actuelle."
+    L["Add a pulsing halo around the icon when it lights up."] =
+        "Ajoute un halo pulsant autour de l'icone quand elle s'allume."
+    L["Pick a health/power threshold, or a spell's availability (ready / not ready / charges full)."] =
+        "Choisis un seuil de vie/ressource, ou la disponibilite d'un sort (pret / pas pret / charges pleines)."
+    L["Value to compare. For discrete resources (Holy Power, Combo Points...) it snaps between whole numbers."] =
+        "Valeur a comparer. Pour les ressources discretes (puissance sacree, points de combo...) elle se cale entre entiers."
+    L["Hide all XpAura icons while you are out of combat."] =
+        "Masque toutes les icones XpAura hors combat."
     L["Import"] = "Importer"
     L["Export all"] = "Exporter tout"
     L["+ Add this condition"] = "+ Ajouter cette condition"
