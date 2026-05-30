@@ -259,9 +259,10 @@ local function EnableSpellDrop(editbox)
         GameTooltip:Show()
     end)
     editbox:HookScript("OnLeave", function() GameTooltip:Hide() end)
-    if spellDropHooked or not _G.ChatEdit_InsertLink then return end
+    if spellDropHooked then return end
     spellDropHooked = true
-    hooksecurefunc("ChatEdit_InsertLink", function(text)
+    -- Recoit le lien (spellbook -> ChatFrameUtil.InsertLink en 12.0 ; ChatEdit_InsertLink en legacy).
+    local function onLink(text)
         if type(text) ~= "string" then return end
         local id = tonumber(text:match("spell:(%d+)"))
         if not id then return end
@@ -279,7 +280,13 @@ local function EnableSpellDrop(editbox)
             target:SetText(tostring(id))
             target:SetCursorPosition(0)
         end
-    end)
+    end
+    if ChatFrameUtil and ChatFrameUtil.InsertLink then
+        hooksecurefunc(ChatFrameUtil, "InsertLink", onLink)  -- grimoire Midnight (12.0)
+    end
+    if _G.ChatEdit_InsertLink then
+        hooksecurefunc("ChatEdit_InsertLink", onLink)        -- voie historique
+    end
 end
 
 --------------------------------------------------------------------------------
