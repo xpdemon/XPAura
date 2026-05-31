@@ -86,6 +86,8 @@ local function GetDB()
     if db.combatOnly == nil then db.combatOnly = false end
     db.positions = db.positions or {}
     db.sizes     = db.sizes or {}      -- taille par icone : db.sizes[posKey] = px
+    db.links       = db.links or {}      -- liaison : db.links[posKey] = groupId (deplacement groupe)
+    db.nextGroupId = db.nextGroupId or 1
     db.userRules = db.userRules or {}  -- regles creees via le menu (propres a ce perso)
     db.nextId    = db.nextId or 1
     -- Grille d'aide au placement (mode deverrouille uniquement).
@@ -358,6 +360,180 @@ local function SavePosition(frame)
     db.positions[frame.posKey] = { point = point, relPoint = relPoint, x = x, y = y }
 end
 
+--------------------------------------------------------------------------------
+-- Liaison d'icones (groupes deplacables, mode deverrouille)
+--------------------------------------------------------------------------------
+-- db.links[posKey] = groupId. Glisser un membre deplace tout le groupe.
+-- ns.linkAnchor (posKey, non persiste) = derniere icone Shift+cliquee.
+local GroupDragStart, GroupDragUpdate, GroupDragStop  -- forward (refs croisees + CreateBlankFrame)
+
+-- Palette cyclique : couleur de bordure derivee du groupId.
+local LINK_COLORS = {
+    { 0.30, 0.70, 1.00 }, { 1.00, 0.55, 0.30 }, { 0.50, 1.00, 0.55 },
+    { 1.00, 0.45, 0.85 }, { 0.80, 0.60, 1.00 }, { 0.40, 0.95, 0.95 },
+}
+local function GroupColor(gid)
+    local c = LINK_COLORS[((gid - 1) % #LINK_COLORS) + 1]
+    return c[1], c[2], c[3]
+end
+
+-- Frames actifs membres du groupe gid (seuls les frames affiches comptent).
+local function GroupMembers(gid)
+    local out = {}
+    if not gid then return out end
+    local links = GetDB().links
+    for _, f in ipairs(ns.frames) do
+        if f.posKey and links[f.posKey] == gid then out[#out + 1] = f end
+    end
+    return out
+end
+
+local function GroupCount(gid) return #GroupMembers(gid) end
+
+-- Dissout un groupe qui n'a plus assez de membres actifs (<2).
+local function PruneGroup(gid)
+    if not gid then return end
+    if GroupCount(gid) < 2 then
+        local links = GetDB().links
+        for _, f in ipairs(ns.frames) do
+            if f.posKey and links[f.posKey] == gid then links[f.posKey] = nil end
+        end
+    end
+end
+
+-- Recolore les bordures par groupe et met en evidence l'ancre (mode deverrouille).
+function ns.RefreshLinkVisuals()
+    local db = GetDB()
+    if db.locked then return end
+    local links = db.links
+    for _, f in ipairs(ns.frames) do
+        if f.border and f.border:IsShown() then
+            local gid = f.posKey and links[f.posKey]
+            if gid then
+                local r, g, b = GroupColor(gid)
+                f.border:SetColorTexture(r, g, b, 0.9)
+            else
+                f.border:SetColorTexture(0, 0, 0, 0.8)
+            end
+            if f.linkAnchorGlow then f.linkAnchorGlow:SetShown(f.posKey == ns.linkAnchor) end
+        end
+    end
+end
+
+-- Shift+clic : (de)lie l'icone f selon l'ancre courante (multi-groupes).
+local function ToggleLink(f)
+    local db = GetDB()
+    local links = db.links
+    local key = f.posKey
+    if not key then return end
+    local anchor = ns.linkAnchor
+
+    -- Pas d'ancre, ou clic sur l'ancre elle-meme : (de)selection de l'ancre.
+    if not anchor or anchor == key then
+        if anchor == key then
+            ns.linkAnchor = nil   -- re-clic sur l'ancre : on la libere (NB: pas d'idiome and/or, nil casserait)
+        else
+            ns.linkAnchor = key
+        end
+        ns.RefreshLinkVisuals()
+        return
+    end
+
+    local gid  = links[key]      -- groupe de l'icone cliquee
+    local aGid = links[anchor]   -- groupe de l'ancre
+
+    if gid and gid == aGid then
+        -- Meme groupe : on delie l'icone cliquee.
+        links[key] = nil
+        PruneGroup(gid)
+    else
+        -- On lie l'icone cliquee au groupe de l'ancre (cree le groupe si besoin).
+        local target = aGid
+        if not target then
+            target = db.nextGroupId
+            db.nextGroupId = db.nextGroupId + 1
+            links[anchor] = target
+        end
+        links[key] = target
+        if gid and gid ~= target then PruneGroup(gid) end
+        ns.linkAnchor = key   -- chainage : la nouvelle icone devient l'ancre
+    end
+    ns.RefreshLinkVisuals()
+end
+
+-- Capture l'ancrage d'origine d'un membre pour le deplacement groupe.
+local function CaptureMemberPos(f)
+    local pos = GetDB().positions[f.posKey]
+    if pos then
+        return { f = f, point = pos.point, relPoint = pos.relPoint, x = pos.x, y = pos.y }
+    end
+    local point, _, relPoint, x, y = f:GetPoint()
+    if not point then
+        local cx, cy = f:GetCenter()
+        local ux, uy = UIParent:GetCenter()
+        point, relPoint = "CENTER", "CENTER"
+        x, y = (cx or ux) - ux, (cy or uy) - uy
+        f:ClearAllPoints()
+        f:SetPoint(point, UIParent, relPoint, x, y)
+    end
+    return { f = f, point = point, relPoint = relPoint, x = x, y = y }
+end
+
+-- Debut de drag : icone libre -> deplacement classique ; membre d'un groupe -> groupe.
+function GroupDragStart(self)
+    local gid = GetDB().links[self.posKey]
+    if not gid or GroupCount(gid) < 2 then
+        ns._groupDrag = nil
+        self:StartMoving()
+        return
+    end
+    local members = {}
+    for _, f in ipairs(GroupMembers(gid)) do members[#members + 1] = CaptureMemberPos(f) end
+    local cx, cy = self:GetCenter()
+    ns._groupDrag = { master = self, members = members, startCx = cx, startCy = cy }
+    self:StartMoving()
+    self:SetScript("OnUpdate", GroupDragUpdate)
+end
+
+-- Pendant le drag : applique le delta du maitre (centre ecran) aux autres membres.
+function GroupDragUpdate(self)
+    local g = ns._groupDrag
+    if not g then self:SetScript("OnUpdate", nil); return end
+    local cx, cy = self:GetCenter()
+    if not cx then return end
+    local dx, dy = cx - g.startCx, cy - g.startCy
+    for _, m in ipairs(g.members) do
+        if m.f ~= self then
+            m.f:ClearAllPoints()
+            m.f:SetPoint(m.point, UIParent, m.relPoint, m.x + dx, m.y + dy)
+        end
+    end
+end
+
+-- Fin de drag : fige et sauvegarde tous les membres (snap applique au delta du groupe).
+function GroupDragStop(self)
+    local g = ns._groupDrag
+    self:StopMovingOrSizing()
+    if not g then
+        SavePosition(self)
+        return
+    end
+    self:SetScript("OnUpdate", nil)
+    ns._groupDrag = nil
+    local db = GetDB()
+    local cx, cy = self:GetCenter()
+    local dx, dy = cx - g.startCx, cy - g.startCy
+    if db.gridSnap and db.gridSize and db.gridSize > 1 then
+        dx = Snap(dx, db.gridSize); dy = Snap(dy, db.gridSize)
+    end
+    for _, m in ipairs(g.members) do
+        local nx, ny = m.x + dx, m.y + dy
+        m.f:ClearAllPoints()
+        m.f:SetPoint(m.point, UIParent, m.relPoint, nx, ny)
+        db.positions[m.f.posKey] = { point = m.point, relPoint = m.relPoint, x = nx, y = ny }
+    end
+end
+
 -- Redimensionne une icone (carree) et resynchronise le halo de chaque couche.
 -- save=true persiste la taille pour ce posKey.
 local MIN_SIZE, MAX_SIZE = 16, 200
@@ -425,6 +601,14 @@ local function CreateBlankFrame(index)
     border:Hide()
     f.border = border
 
+    -- Lisere de l'ancre de liaison : cadre jaune debordant, derriere la bordure.
+    local anchorGlow = f:CreateTexture(nil, "BACKGROUND", nil, -1)
+    anchorGlow:SetPoint("TOPLEFT", f, "TOPLEFT", -4, 4)
+    anchorGlow:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 4, -4)
+    anchorGlow:SetColorTexture(1, 0.85, 0, 0.95)
+    anchorGlow:Hide()
+    f.linkAnchorGlow = anchorGlow
+
     local label = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     label:SetPoint("TOP", f, "BOTTOM", 0, -2)
     label:Hide()
@@ -435,11 +619,17 @@ local function CreateBlankFrame(index)
 
     f:SetMovable(true)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    f:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        SavePosition(self)
+    -- Shift+clic gauche (deverrouille) = lier/delier ; sinon le drag deplace l'icone/groupe.
+    f:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" and not GetDB().locked and IsShiftKeyDown() then
+            ToggleLink(self)
+        end
     end)
+    f:SetScript("OnDragStart", function(self)
+        if GetDB().locked or IsShiftKeyDown() then return end  -- Shift reserve a la liaison
+        GroupDragStart(self)
+    end)
+    f:SetScript("OnDragStop", function(self) GroupDragStop(self) end)
 
     -- Redimensionnement (mode deverrouille).
     f:SetResizable(true)
@@ -723,6 +913,18 @@ local function UpdateFrame(f)
     f:EnableMouse(unlocked)
     f:EnableMouseWheel(unlocked)
     f.border:SetShown(unlocked)
+    if unlocked then
+        local gid = f.posKey and db.links[f.posKey]
+        if gid then
+            local r, g, b = GroupColor(gid)
+            f.border:SetColorTexture(r, g, b, 0.9)
+        else
+            f.border:SetColorTexture(0, 0, 0, 0.8)
+        end
+        if f.linkAnchorGlow then f.linkAnchorGlow:SetShown(f.posKey == ns.linkAnchor) end
+    elseif f.linkAnchorGlow then
+        f.linkAnchorGlow:Hide()
+    end
     f.label:SetShown(unlocked)
     if f.sizer then f.sizer:SetShown(unlocked) end
     f:Show()
@@ -791,8 +993,10 @@ SlashCmdList.XPAURA = function(msg)
         db.locked = false
         ns.UpdateGrid()
         Print(string.format(L["unlocked — move (drag), resize (wheel/handle), then %s."], "|cffffff00/xpaura lock|r"))
+        Print(L["Shift+click icons to link or unlink; drag a member to move the whole group."])
     elseif arg == "lock" then
         db.locked = true
+        ns.linkAnchor = nil
         ns.UpdateGrid()
         Print(L["locked."])
     elseif arg == "grid" then
@@ -802,6 +1006,9 @@ SlashCmdList.XPAURA = function(msg)
     elseif arg == "reset" then
         db.positions = {}
         db.sizes = {}
+        db.links = {}
+        db.nextGroupId = 1
+        ns.linkAnchor = nil
         for i, f in ipairs(ns.frames) do ApplyPosition(f, i); SetIconSize(f, 50, false) end
         Print(L["positions and sizes reset."])
     elseif arg == "test" or arg == "debug" then

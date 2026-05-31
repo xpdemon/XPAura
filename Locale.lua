@@ -150,6 +150,12 @@ if locale == "frFR" then
     L["commands: %s"] = "commandes : %s"
     L["WARNING: C_CurveUtil unavailable — health/power thresholds will only work out of combat."] =
         "ATTENTION : C_CurveUtil indisponible — les seuils vie/puissance ne fonctionneront qu'hors combat."
+    L["Shift+click icons to link or unlink; drag a member to move the whole group."] =
+        "Shift+clic sur les icones pour lier/delier ; glisse un membre pour deplacer tout le groupe."
+    L["Unlink all"] = "Tout delier"
+    L["New group"] = "Nouveau groupe"
+    L["Release the current anchor so your next Shift+clicks start a brand-new group."] =
+        "Libere l'ancre courante : tes prochains Shift+clic demarrent un tout nouveau groupe."
 
 elseif locale == "deDE" then
     L["Spell ready"] = "Zauber bereit"
