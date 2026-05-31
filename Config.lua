@@ -1139,7 +1139,22 @@ local function BuildSettingsTab(body)
     cfg.lockBtn = MakeButton(body, 150, 220, -222, L["Lock"])
     cfg.lockBtn:SetScript("OnClick", function()
         ns.GetDB().locked = true
+        ns.linkAnchor = nil
         if ns.UpdateGrid then ns.UpdateGrid() end
+    end)
+
+    MakeLabel(body, L["Shift+click icons to link or unlink; drag a member to move the whole group."], 10, -252, 440)
+    cfg.newGroupBtn = MakeButton(body, 200, 10, -278, L["New group"])
+    cfg.newGroupBtn:SetScript("OnClick", function()
+        ns.linkAnchor = nil
+        if ns.RefreshLinkVisuals then ns.RefreshLinkVisuals() end
+    end)
+    AddTooltip(cfg.newGroupBtn, nil, "Release the current anchor so your next Shift+clicks start a brand-new group.")
+    cfg.unlinkAllBtn = MakeButton(body, 200, 220, -278, L["Unlink all"])
+    cfg.unlinkAllBtn:SetScript("OnClick", function()
+        local db = ns.GetDB()
+        db.links = {}; db.nextGroupId = 1; ns.linkAnchor = nil
+        if ns.RefreshLinkVisuals then ns.RefreshLinkVisuals() end
     end)
 end
 
