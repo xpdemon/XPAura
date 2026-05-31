@@ -900,15 +900,24 @@ local function EnsureIOPopup()
     p.note = p:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     p.note:SetPoint("TOPLEFT", 16, -28); p.note:SetPoint("TOPRIGHT", -16, -28); p.note:SetJustifyH("LEFT")
 
-    local box = CreateFrame("EditBox", nil, p, "BackdropTemplate")
+    -- Conteneur qui DECOUPE le texte : une longue chaine ne deborde plus sur les boutons.
+    local holder = CreateFrame("Frame", nil, p, "BackdropTemplate")
+    holder:SetPoint("TOPLEFT", 16, -52)
+    holder:SetPoint("BOTTOMRIGHT", -16, 48)
+    Skin(holder, { 0.05, 0.05, 0.05, 1 }, PAL.border)
+    holder:SetClipsChildren(true)   -- empeche le texte de l'editbox de depasser le cadre
+    holder:EnableMouse(true)
+
+    local box = CreateFrame("EditBox", nil, holder)
     box:SetMultiLine(true)
-    box:SetPoint("TOPLEFT", 16, -52)
-    box:SetPoint("BOTTOMRIGHT", -16, 48)
-    Skin(box, { 0.05, 0.05, 0.05, 1 }, PAL.border)
+    -- Largeur bornee (TOPLEFT + TOPRIGHT) -> retour a la ligne ; hauteur auto, decoupee par le holder.
+    box:SetPoint("TOPLEFT", 4, -4)
+    box:SetPoint("TOPRIGHT", -4, -4)
     box:SetFontObject(ChatFontNormal)
     box:SetAutoFocus(false); box:SetMaxLetters(0)
-    box:SetTextInsets(6, 6, 6, 6); box:SetTextColor(C(PAL.text))
+    box:SetTextInsets(2, 2, 2, 2); box:SetTextColor(C(PAL.text))
     box:SetScript("OnEscapePressed", box.ClearFocus)
+    holder:SetScript("OnMouseDown", function() box:SetFocus() end)  -- clic dans la zone vide = focus
     p.edit = box
 
     p.accept = MakeButton(p, 150); p.accept:ClearAllPoints(); p.accept:SetPoint("BOTTOMLEFT", 16, 14)
