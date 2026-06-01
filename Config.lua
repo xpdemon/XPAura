@@ -62,6 +62,8 @@ local RAW_SOURCES = {
     { name = GS("LUNAR_POWER", "Lunar Power"),  source = "power", pt = PT("LunarPower") },
     { name = GS("ESSENCE", "Essence"),          source = "power", pt = PT("Essence") },
     { name = GS("COMBO_POINTS", "Combo Points"),source = "power", pt = PT("ComboPoints") },
+    { name = GS("CHI", "Chi"),                  source = "power", pt = PT("Chi") },
+    { name = GS("ARCANE_CHARGES", "Arcane Charges"), source = "power", pt = PT("ArcaneCharges") },
     { name = L["Spell ready"],        source = "spellready" },
     { name = L["Spell NOT ready"],    source = "spellnotready" },
     { name = L["Spell charges full"], source = "spellcharged" },
