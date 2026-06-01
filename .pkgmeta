@@ -1,0 +1,12 @@
+# Wago / BigWigs packager configuration
+# The repo is named "XPAura" but the WoW addon folder MUST match the .toc
+# base name ("XpAura.toc") or the game won't load it.
+package-as: XpAura
+
+enable-nolib-creation: no
+
+# Dev-only files that should not ship inside the addon zip.
+ignore:
+  - README.md
+  - .gitignore
+  - .github

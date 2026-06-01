@@ -1,0 +1,24 @@
+name: Package and release
+
+# Fires when you publish a GitHub Release (which also creates its tag).
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write   # let the packager attach the built .zip to the GitHub release
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so the packager can build the changelog
+
+      - name: Package and upload to Wago
+        uses: BigWigsMods/packager@v2
+        env:
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}      # built-in token: attaches the zip to the GH release
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}  # repo secret you create: uploads to Wago (X-Wago-ID in the .toc)
