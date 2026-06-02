@@ -64,6 +64,8 @@ if locale == "frFR" then
     L["Display:"] = "Affichage :"
     L["Runes ready:"] = "Runes pretes :"
     L["Add the glow (halo) when the icon lights up"] = "Ajouter le glow (halo) quand l'icone s'allume"
+    L["Unit:"] = "Unite :"
+    L["Self"] = "Soi"
     L["Scope:"] = "Portee :"
     L["Show icons only in combat (global)"] = "Afficher les icones seulement en combat (global)"
     L["Show grid in move mode"] = "Afficher la grille en mode deplacement"
