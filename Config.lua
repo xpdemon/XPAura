@@ -122,6 +122,14 @@ local CDMODE_ITEMS   = { { name = L["sweep (always visible)"], mode = "sweep" },
 local OP_ITEMS      = { { name = L["below threshold"], op = "<" }, { name = L["above threshold"], op = ">" } }
 local TYPE_ITEMS    = { { name = L["percentage"], pct = true },        { name = L["absolute value"], pct = false } }
 local COMBINE_ITEMS = { { name = L["at least one (OR)"], combine = "OR" }, { name = L["all (AND)"], combine = "AND" } }
+-- Unite ciblee par une condition Vie. Noms Cible/Focus via constantes Blizzard (deja
+-- localisees) ; "Self" via L. La Vie est la SEULE ressource pertinente sur une cible.
+local UNIT_ITEMS = { { name = L["Self"],              unit = "player" },
+                     { name = GS("TARGET", "Target"), unit = "target" },
+                     { name = GS("FOCUS", "Focus"),   unit = "focus" } }
+local function UnitOfIndex(i) return (UNIT_ITEMS[i] or UNIT_ITEMS[1]).unit end
+local HEALTH_INDEX = 1
+for i, s in ipairs(SOURCES) do if s.source == "health" then HEALTH_INDEX = i; break end end
 local GRIDSTEP_ITEMS = { { name = "5 px", step = 5 }, { name = "10 px", step = 10 },
                          { name = "20 px", step = 20 }, { name = "25 px", step = 25 },
                          { name = "50 px", step = 50 } }
@@ -152,7 +160,11 @@ local function CondDesc(c)
     end
     local thr = c.pct and (c.pct .. "%") or tostring(c.value)
     local op  = (c.op == ">") and ">" or "<"
-    return SourceLabel(c) .. " " .. op .. " " .. thr
+    local who = ""
+    if c.unit and c.unit ~= "player" then
+        who = ((c.unit == "target") and GS("TARGET", "Target") or GS("FOCUS", "Focus")) .. " "
+    end
+    return who .. SourceLabel(c) .. " " .. op .. " " .. thr
 end
 
 local function RuleDesc(rule)
@@ -465,13 +477,18 @@ local function CurrentCondition()
     end
     local c = { kind = "resource", source = s.source, op = OP_ITEMS[form.opIndex].op }
     if s.source == "power" then c.powerType = s.pt end
+    -- Unite seulement pertinente pour la Vie (Cible/Focus) ; sinon joueur (non stocke).
+    if s.source == "health" then
+        local u = UnitOfIndex(form.unitIndex)
+        if u ~= "player" then c.unit = u end
+    end
     local v = tonumber(cfg.valueBox:GetText()) or 50
     if TYPE_ITEMS[form.typeIndex].pct then c.pct = v else c.value = v end
     return c
 end
 
 -- Lignes de conditions en attente, rendues dans la zone editeur (cfg.editorBody).
-local PEND_Y = -412
+local PEND_Y = -440
 local function RefreshPending()
     pendRows = pendRows or {}
     for _, r in ipairs(pendRows) do r:Hide() end
@@ -509,6 +526,9 @@ end
 local function RefreshCondFields()
     if not cfg or not cfg.opDD then return end
     local condMode = RULETYPE_ITEMS[form.ruleTypeIndex].mode == "conditions"
+    -- Unite Cible/Focus : seule la Vie a du sens -> on force et verrouille la ressource sur Vie.
+    local targetUnit = UnitOfIndex(form.unitIndex) ~= "player"
+    if targetUnit then form.sourceIndex = HEALTH_INDEX end
     local s = SOURCES[form.sourceIndex]
     local isSpell = (s and SPELL_SOURCE[s.source]) and true or false
     local showResource = condMode and not isSpell
@@ -521,6 +541,13 @@ local function RefreshCondFields()
     cfg.watchLabel:SetShown(showSpell)
     cfg.watchSpellBox:SetShown(showSpell)
     cfg.watchHint:SetShown(showSpell)
+    -- Dropdown Unite : visible pour toute condition ressource (Vie ou puissance).
+    if cfg.condUnitLabel then cfg.condUnitLabel:SetShown(showResource) end
+    if cfg.condUnitDD then cfg.condUnitDD:SetShown(showResource) end
+    -- Ressource : dropdown normal (Vie/puissance/sort) si Soi ; libelle "Vie" fige si
+    -- Cible/Focus. Le dropdown reste visible pour les sources "sort" -> condMode, pas showResource.
+    if cfg.condResFixed then cfg.condResFixed:SetShown(condMode and targetUnit) end
+    cfg.sourceDD:SetShown(condMode and not targetUnit)
 end
 
 -- Affiche/masque les blocs selon le type de regle (plus de tail-shift).
@@ -1033,32 +1060,45 @@ local function BuildEditor(body)
         function() return form.combineIndex end,
         function(i) form.combineIndex = i end))
     cw(MakeLabel(body, "|cff66ccff" .. L["New condition:"] .. "|r", 10, -254, 320))
-    cw(MakeLabel(body, L["Resource:"], 10, -278, 90))
-    cfg.sourceDD = cw(MakeDropdown(body, 300, 110, -276, SOURCES,
+    -- Unite sur sa propre ligne, meme rythme que les autres (label x10, dropdown x110).
+    cfg.condUnitLabel = cw(MakeLabel(body, L["Unit:"], 10, -282, 90))
+    cfg.condUnitDD = cw(MakeDropdown(body, 300, 110, -280, UNIT_ITEMS,
+        function() return form.unitIndex end,
+        function(i)
+            form.unitIndex = i
+            RefreshCondFields()
+            if cfg.RefreshDropdowns then cfg.RefreshDropdowns() end
+        end))
+    AddTooltip(cfg.condUnitDD, L["Unit:"], "Whose health to read: yourself, your target (e.g. execute range on target health), or your focus. Only Health applies to a target.")
+    cw(MakeLabel(body, L["Resource:"], 10, -310, 90))
+    cfg.sourceDD = cw(MakeDropdown(body, 300, 110, -308, SOURCES,
         function() return form.sourceIndex end,
         function(i) form.sourceIndex = i; RefreshCondFields() end))
     AddTooltip(cfg.sourceDD, L["Resource:"], "Pick a health/power threshold, or a spell's availability (ready / not ready / charges full).")
-    cfg.opLabel = cw(MakeLabel(body, L["Condition:"], 10, -306, 90))
-    cfg.opDD = cw(MakeDropdown(body, 300, 110, -304, OP_ITEMS,
+    -- Libelle "Vie" fige : remplace le dropdown ressource quand l'unite est une cible.
+    cfg.condResFixed = cw(MakeLabel(body, GS("HEALTH", "Health"), 110, -310, 300))
+    cfg.condResFixed:Hide()
+    cfg.opLabel = cw(MakeLabel(body, L["Condition:"], 10, -338, 90))
+    cfg.opDD = cw(MakeDropdown(body, 300, 110, -336, OP_ITEMS,
         function() return form.opIndex end,
         function(i) form.opIndex = i end))
-    cfg.seuilLabel = cw(MakeLabel(body, L["Threshold:"], 10, -334, 90))
-    cfg.typeDD = cw(MakeDropdown(body, 120, 110, -332, TYPE_ITEMS,
+    cfg.seuilLabel = cw(MakeLabel(body, L["Threshold:"], 10, -366, 90))
+    cfg.typeDD = cw(MakeDropdown(body, 120, 110, -364, TYPE_ITEMS,
         function() return form.typeIndex end,
         function(i) form.typeIndex = i end))
-    cfg.valueBox = cw(MakeEdit(body, 55, 240, -332))
+    cfg.valueBox = cw(MakeEdit(body, 55, 240, -364))
     cfg.valueBox:SetText("50")
     AddTooltip(cfg.seuilLabel, L["Threshold:"], "Value to compare. For discrete resources (Holy Power, Combo Points...) it snaps between whole numbers.")
-    cfg.watchLabel = cw(MakeLabel(body, L["Watched spell:"], 10, -306, 90))
-    cfg.watchSpellBox = cw(MakeEdit(body, 180, 110, -304))
+    cfg.watchLabel = cw(MakeLabel(body, L["Watched spell:"], 10, -338, 90))
+    cfg.watchSpellBox = cw(MakeEdit(body, 180, 110, -336))
     EnableSpellDrop(cfg.watchSpellBox)
-    cfg.watchHint = cw(MakeLabel(body, "|cff888888" .. L["(empty = icon's spell)"] .. "|r", 10, -334, 300))
-    cfg.addCondBtn = cw(MakeButton(body, 200, 10, -362, L["+ Add condition"]))
+    cfg.watchHint = cw(MakeLabel(body, "|cff888888" .. L["(empty = icon's spell)"] .. "|r", 10, -366, 300))
+    cfg.addCondBtn = cw(MakeButton(body, 200, 10, -394, L["+ Add condition"]))
     cfg.addCondBtn:SetScript("OnClick", function()
         table.insert(form.pending, CurrentCondition())
         RefreshPending()
     end)
-    cw(MakeLabel(body, L["Added conditions:"], 10, -392, 320))
+    cw(MakeLabel(body, L["Added conditions:"], 10, -424, 320))
 
     -- ===== Bloc COOLDOWN =====
     cfg.cdNote = cdw(body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall"))
@@ -1171,7 +1211,7 @@ end
 
 local function BuildConfig()
     cfg = CreateFrame("Frame", "XpAuraConfig", UIParent, "BackdropTemplate")
-    cfg:SetSize(480, 600)
+    cfg:SetSize(480, 628)
     cfg:SetPoint("CENTER")
     cfg:SetFrameStrata("HIGH")
     cfg:SetMovable(true); cfg:EnableMouse(true); cfg:SetClampedToScreen(true)
@@ -1180,7 +1220,7 @@ local function BuildConfig()
 
     form = { ruleTypeIndex = 1, sourceIndex = 1, opIndex = 1, typeIndex = 1,
              combineIndex = 1, cdModeIndex = 1, runeOpIndex = 1, scopeIndex = 1,
-             glow = false, pending = {} }
+             unitIndex = 1, glow = false, pending = {} }
 
     -- Barre de titre
     local tb = CreateFrame("Frame", nil, cfg, "BackdropTemplate")

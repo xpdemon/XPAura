@@ -178,7 +178,11 @@ local function RuleFraction(rule)
     if rule.value then
         local max
         if rule.source == "health" then
-            max = UnitHealthMax("player")
+            -- rule.unit ("player" par defaut, ou "target"/"focus"). Le max d'une cible
+            -- peut etre secret en combat -> pcall, repli 0.5 (seuils cible surtout en %).
+            local unit = rule.unit or "player"
+            local ok = pcall(function() max = UnitHealthMax(unit) end)
+            if not ok then max = nil end
         else
             max = UnitPowerMax("player", rule.powerType)
         end
@@ -230,6 +234,16 @@ local function BoolEval(fn)
         local ok, res = pcall(fn)
         if ok and res then return 1 else return 0 end
     end
+end
+
+-- Unite valide a lire ? (existe + vivante). UnitExists/UnitIsDeadOrGhost sont des
+-- booleens NON secrets -> on peut brancher dessus. Sans cible, vie=0 -> la courbe
+-- d'execution (< X%) s'allumerait a tort ; on coupe donc l'alpha a la source.
+local function UnitReadable(unit)
+    if unit == "player" then return true end
+    if not UnitExists(unit) then return false end
+    if UnitIsDeadOrGhost(unit) then return false end
+    return true
 end
 
 -- Construit eval() -> alpha (0/1). nil si indisponible.
@@ -321,11 +335,18 @@ local function BuildConditionEval(cond, defaultSpellID)
     end
 
     -- Ressource (vie / puissance) : voie secret-safe (Curve -> alpha).
+    -- cond.unit (Vie uniquement : "player"/"target"/"focus") -> ex. glow en phase
+    -- d'execution (vie de la cible < 35%). Meme voie secrete ; on coupe l'alpha si
+    -- l'unite n'existe pas / est morte (sinon vie 0 -> courbe d'execution allumee a tort).
     local fraction = RuleFraction(cond)
     local curve = BuildThresholdCurve(cond.op or "<", fraction)
     if not curve then return nil end
     if cond.source == "health" then
-        return function() return UnitHealthPercent("player", false, curve) end
+        local unit = cond.unit or "player"
+        return function()
+            if not UnitReadable(unit) then return 0 end
+            return UnitHealthPercent(unit, false, curve)
+        end
     else
         local pt = cond.powerType
         return function() return UnitPowerPercent("player", pt, false, curve) end
