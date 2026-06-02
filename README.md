@@ -12,6 +12,7 @@ Designed around Midnight's **Secret Values**: in combat the player's health/powe
 
 - **Condition-based glow** — show an icon (with an optional pulsing halo) when conditions are met:
   - **Resource threshold** — health or any power type (`< / >`, percentage or absolute value). Discrete resources (Holy Power, Combo Points…) snap cleanly between integer steps.
+  - **Unit choice for health** — read **your own**, your **target's**, or your **focus'** health (e.g. glow in execute range when the target drops below 35%). Power types always read yourself.
   - **Spell availability** — *ready* (GCD-aware), *not ready*, or *charges full*. Can watch the icon's own spell or any other spell.
   - **Runes available** (Death Knight) — threshold on the number of ready runes.
 - **Combine conditions** with **AND / OR** in a single rule.
@@ -58,6 +59,7 @@ Conçu pour les **valeurs secrètes** de Midnight : en combat, la vie/puissance 
 
 - **Glow selon conditions** — affiche une icône (avec un halo pulsant optionnel) quand les conditions sont remplies :
   - **Seuil de ressource** — vie ou n'importe quelle puissance (`< / >`, pourcentage ou valeur absolue). Les ressources discrètes (Puissance sacrée, Points de combo…) basculent nettement entre paliers.
+  - **Choix de l'unité pour la vie** — lit **ta** vie, celle de ta **cible** ou de ton **focus** (ex. glow en phase d'exécution quand la cible passe sous 35 %). Les puissances lisent toujours toi-même.
   - **Disponibilité d'un sort** — *prêt* (GCD géré), *pas prêt*, ou *charges pleines*. Surveille le sort de l'icône ou un autre sort au choix.
   - **Runes disponibles** (Chevalier de la mort) — seuil sur le nombre de runes prêtes.
 - **Combinaison de conditions** en **ET / OU** dans une même règle.
